@@ -1,0 +1,9 @@
+[package]
+name = "cryptopals"
+version = "0.1.0"
+authors = ["Jack Lund <jackl@geekheads.net>"]
+
+[dependencies]
+base64 = "0.10.0"
+hex = "0.3.2"
+is_sorted = "0.1.0"
