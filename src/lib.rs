@@ -101,16 +101,17 @@ fn get_score(key: &u8, ciphertext: &[u8]) -> Option<(usize, String)> {
     }
 }
 
-// TODO:
-// 1) extract common functionality between this and find_xor_key()
-// 2) cache the plaintext so I don't have to decrypt it twice
-// 3) Put the tuple values in the same order as the return values
-pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
-    let (key, score) = ciphertext
+fn try_decrypt_with_key_list(
+    ciphertext: &[u8],
+    test_string: &[u8],
+    key_list: &[u8],
+) -> Option<(usize, u8, String)> {
+    let (key, score) = test_string
         .into_iter()
         .fold((0u8, 0), |key_and_score, value| {
-            let (local_key, local_score) =
-                (0u8..255u8).fold(key_and_score, |(mut key, mut score), byte| {
+            let (local_key, local_score) = key_list.iter().fold(
+                key_and_score,
+                |(mut key, mut score), byte| {
                     let test_key = byte ^ value;
                     if let Some((test_score, decrypted)) = get_score(&test_key, ciphertext) {
                         if test_score > score {
@@ -120,7 +121,8 @@ pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
                     }
 
                     (key, score)
-                });
+                },
+            );
             if local_score > key_and_score.1 {
                 (local_key, local_score)
             } else {
@@ -141,43 +143,21 @@ pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
     None
 }
 
+// TODO:
+// 1) extract common functionality between this and find_xor_key()
+// 2) cache the plaintext so I don't have to decrypt it twice
+// 3) Put the tuple values in the same order as the return values
+pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
+    try_decrypt_with_key_list(ciphertext, ciphertext, &(0u8..255u8).collect::<Vec<u8>>())
+}
+
 // Find the key by finding the most frequent chars in the ciphertext
 // and then test them against a list of the most frequent characters in English
 pub fn find_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
     let histogram = get_character_histogram(&ciphertext);
     let etaoin = " eEtTaAoOiInN".as_bytes();
 
-    let (key, score) = histogram.into_iter().fold((0u8, 0), |(k, s), value| {
-        let (local_key, local_score) = etaoin.iter().fold((k, s), |(mut key, mut score), byte| {
-            let test_key = byte ^ value;
-            if let Some((test_score, decrypted)) = get_score(&test_key, ciphertext) {
-                if test_score > score {
-                    score = test_score;
-                    key = test_key;
-                }
-            }
-
-            (key, score)
-        });
-
-        if local_score > s {
-            (local_key, local_score)
-        } else {
-            (k, s)
-        }
-    });
-
-    if score > 0 {
-        return Some((
-            score,
-            key,
-            str::from_utf8(&decrypt_xor(&key, &ciphertext))
-                .unwrap()
-                .to_string(),
-        ));
-    }
-
-    None
+    try_decrypt_with_key_list(ciphertext, &histogram, etaoin)
 }
 
 #[cfg(test)]
