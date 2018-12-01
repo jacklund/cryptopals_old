@@ -101,6 +101,9 @@ fn get_score(key: &u8, ciphertext: &[u8]) -> Option<(usize, String)> {
     }
 }
 
+// TODO:
+// 1) cache the plaintext so I don't have to decrypt it twice
+// 2) Put the tuple values in the same order as the return values
 fn try_decrypt_with_key_list(
     ciphertext: &[u8],
     test_string: &[u8],
@@ -143,10 +146,6 @@ fn try_decrypt_with_key_list(
     None
 }
 
-// TODO:
-// 1) extract common functionality between this and find_xor_key()
-// 2) cache the plaintext so I don't have to decrypt it twice
-// 3) Put the tuple values in the same order as the return values
 pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
     try_decrypt_with_key_list(ciphertext, ciphertext, &(0u8..255u8).collect::<Vec<u8>>())
 }
