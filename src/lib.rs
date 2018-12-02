@@ -101,46 +101,42 @@ fn get_score(key: &u8, ciphertext: &[u8]) -> Option<(usize, String)> {
     }
 }
 
-// TODO:
-// 1) cache the plaintext so I don't have to decrypt it twice
-// 2) Put the tuple values in the same order as the return values
+// Iterate through the test string to guess the key, then use the key
+// to decrypt the ciphertext. Find the key/plaintext combination with the
+// highest score, and return that
 fn try_decrypt_with_key_list(
     ciphertext: &[u8],
     test_string: &[u8],
     key_list: &[u8],
 ) -> Option<(usize, u8, String)> {
-    let (key, score) = test_string
-        .into_iter()
-        .fold((0u8, 0), |key_and_score, value| {
-            let (local_key, local_score) = key_list.iter().fold(
-                key_and_score,
-                |(mut key, mut score), byte| {
+    let (score, key, decrypted) = test_string.into_iter().fold(
+        (0, 0u8, String::new()),
+        |score_key_decrypted, value| {
+            let (local_score, local_key, local_decrypted) = key_list.iter().fold(
+                score_key_decrypted.clone(),
+                |(mut score, mut key, mut decrypted), byte| {
                     let test_key = byte ^ value;
-                    if let Some((test_score, decrypted)) = get_score(&test_key, ciphertext) {
+                    if let Some((test_score, test_decrypted)) = get_score(&test_key, ciphertext) {
                         if test_score > score {
                             score = test_score;
                             key = test_key;
+                            decrypted = test_decrypted;
                         }
                     }
 
-                    (key, score)
+                    (score, key, decrypted)
                 },
             );
-            if local_score > key_and_score.1 {
-                (local_key, local_score)
+            if local_score > score_key_decrypted.0 {
+                (local_score, local_key, local_decrypted)
             } else {
-                key_and_score
+                score_key_decrypted
             }
-        });
+        },
+    );
 
     if score > 0 {
-        return Some((
-            score,
-            key,
-            str::from_utf8(&decrypt_xor(&key, &ciphertext))
-                .unwrap()
-                .to_string(),
-        ));
+        return Some((score, key, decrypted));
     }
 
     None
@@ -161,7 +157,7 @@ pub fn find_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
 
 #[cfg(test)]
 mod tests {
-    use brute_force_xor_key;
+    //use brute_force_xor_key;
     use find_xor_key;
     use hex;
     use hex_to_base64;
