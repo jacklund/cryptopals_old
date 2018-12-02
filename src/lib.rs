@@ -65,6 +65,7 @@ pub fn get_character_histogram(string: &[u8]) -> Vec<u8> {
     list.into_iter().map(|(c, _)| c).collect()
 }
 
+// Score text based on frequency of letters we expect to be frequent
 pub fn score_text(string: &str) -> usize {
     let mut score: usize = 0;
     for ch in string.chars() {
@@ -89,10 +90,12 @@ pub fn score_text(string: &str) -> usize {
     score
 }
 
+// Decrypt ciphertext using xor
 pub fn decrypt_xor(key: &u8, ciphertext: &[u8]) -> Vec<u8> {
     ciphertext.iter().map(|c| c ^ *key).collect::<Vec<u8>>()
 }
 
+// Decrypt using the key and return the score and decrypted value, or None if the decryption failed
 fn get_score(key: &u8, ciphertext: &[u8]) -> Option<(usize, String)> {
     if let Ok(string) = str::from_utf8(&decrypt_xor(&key, &ciphertext)) {
         Some((score_text(string), string.to_string()))
@@ -101,36 +104,60 @@ fn get_score(key: &u8, ciphertext: &[u8]) -> Option<(usize, String)> {
     }
 }
 
-// Iterate through the test string to guess the key, then use the key
-// to decrypt the ciphertext. Find the key/plaintext combination with the
-// highest score, and return that
-fn try_decrypt_with_key_list(
+// Iterate through a list of keys, and try each key in turn, returning the highest-scoring
+// plaintext, along with the key and score
+fn try_decrypt_against_key_list<F>(
+    ciphertext: &[u8],
+    key_list: &[u8],
+    key_generator: F,
+    current_score: usize,
+    current_key: u8,
+    current_decrypted: String,
+) -> (usize, u8, String)
+where
+    F: Fn(&u8) -> u8,
+{
+    let (score, key, decrypted) = key_list.iter().fold(
+        (current_score, current_key, current_decrypted),
+        |(mut score, mut key, mut decrypted), byte| {
+            let test_key = key_generator(byte);
+            if let Some((test_score, test_decrypted)) = get_score(&test_key, ciphertext) {
+                if test_score > score {
+                    score = test_score;
+                    key = test_key;
+                    decrypted = test_decrypted;
+                }
+            }
+
+            (score, key, decrypted)
+        },
+    );
+    (score, key, decrypted)
+}
+
+// Use a test string to guess the key
+fn try_decrypt_with_test_string(
     ciphertext: &[u8],
     test_string: &[u8],
     key_list: &[u8],
 ) -> Option<(usize, u8, String)> {
+    // Try each key in the key list against each
     let (score, key, decrypted) = test_string.into_iter().fold(
         (0, 0u8, String::new()),
-        |score_key_decrypted, value| {
-            let (local_score, local_key, local_decrypted) = key_list.iter().fold(
-                score_key_decrypted.clone(),
-                |(mut score, mut key, mut decrypted), byte| {
-                    let test_key = byte ^ value;
-                    if let Some((test_score, test_decrypted)) = get_score(&test_key, ciphertext) {
-                        if test_score > score {
-                            score = test_score;
-                            key = test_key;
-                            decrypted = test_decrypted;
-                        }
-                    }
-
-                    (score, key, decrypted)
-                },
+        |(score, key, decrypted), value| {
+            // Iterate over the key list,
+            let (local_score, local_key, local_decrypted) = try_decrypt_against_key_list(
+                ciphertext,
+                key_list,
+                |b| b ^ value,
+                score,
+                key,
+                decrypted.clone(),
             );
-            if local_score > score_key_decrypted.0 {
+            if local_score > score {
                 (local_score, local_key, local_decrypted)
             } else {
-                score_key_decrypted
+                (score, key, decrypted)
             }
         },
     );
@@ -142,8 +169,16 @@ fn try_decrypt_with_key_list(
     None
 }
 
+// Try to brute force the decryption by iterating through all 255 keys
 pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
-    try_decrypt_with_key_list(ciphertext, ciphertext, &(0u8..255u8).collect::<Vec<u8>>())
+    Some(try_decrypt_against_key_list(
+        ciphertext,
+        &(0u8..255u8).collect::<Vec<u8>>(),
+        |b| *b,
+        0,
+        0,
+        String::new(),
+    ))
 }
 
 // Find the key by finding the most frequent chars in the ciphertext
@@ -152,7 +187,7 @@ pub fn find_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
     let histogram = get_character_histogram(&ciphertext);
     let etaoin = " eEtTaAoOiInN".as_bytes();
 
-    try_decrypt_with_key_list(ciphertext, &histogram, etaoin)
+    try_decrypt_with_test_string(ciphertext, &histogram, etaoin)
 }
 
 #[cfg(test)]
