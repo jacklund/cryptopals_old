@@ -45,6 +45,7 @@ pub fn xor(first_hex: &str, second_hex: &str) -> Result<String, Box<Error>> {
     ))
 }
 
+// Get a list of the characters in the string, ordered by frequency
 pub fn get_character_histogram(string: &[u8]) -> Vec<u8> {
     let histogram = string
         .into_iter()
@@ -188,8 +189,12 @@ pub fn find_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, Vec<u8>)> {
     try_decrypt_with_test_string(ciphertext, &histogram, etaoin)
 }
 
+// Encrypt/decrypt using a repeating key and xor
 pub fn encrypt_decrypt_repeating_key_xor(key: &[u8], plain_or_ciphertext: &[u8]) -> Vec<u8> {
+    // How many times to repeat the key
     let repeat = (plain_or_ciphertext.len() as f32 / key.len() as f32).ceil() as usize;
+
+    // Generate the repeated key which has the same length as the text
     let mut repeated_key = std::iter::repeat(key).take(repeat).fold(
         Vec::<u8>::new(),
         |mut v, b| {
@@ -198,6 +203,8 @@ pub fn encrypt_decrypt_repeating_key_xor(key: &[u8], plain_or_ciphertext: &[u8])
         },
     );
     repeated_key.truncate(plain_or_ciphertext.len());
+
+    // Xor the key with the text and return the result
     plain_or_ciphertext
         .iter()
         .zip(repeated_key.iter())
@@ -218,12 +225,15 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> usize {
 // Returns a list of the keysizes, ordered by distance
 pub fn find_repeating_xor_keysize(string: &[u8]) -> Vec<usize> {
     let keysizes = 2..40;
+    // For each key size...
     let mut keysize_distance_list = keysizes
         .map(|keysize| {
+            // split string into keysize chunks and partition into groups of even and odd chunks...
             let (even, odd): (Vec<(usize, &[u8])>, Vec<(usize, &[u8])>) = string
                 .chunks(keysize)
                 .enumerate()
                 .partition(|(i, _)| i % 2 == 0);
+            // Zip the groups together and add up the hamming distances between each pair
             let distance = even.into_iter().zip(odd.into_iter()).fold(
                 0usize,
                 |mut acc, ((_, first), (_, second))| {
@@ -231,6 +241,10 @@ pub fn find_repeating_xor_keysize(string: &[u8]) -> Vec<usize> {
                     acc
                 },
             );
+            // average distance normalized by dividing by key length
+            // avg = total distance / num samples / key length
+            // num samples = string length / key length
+            // therefore avg distance = total distance over string length
             let normalized = distance as f32 / string.len() as f32;
             (keysize, normalized)
         })
