@@ -66,24 +66,26 @@ pub fn get_character_histogram(string: &[u8]) -> Vec<u8> {
 }
 
 // Score text based on frequency of letters we expect to be frequent
-pub fn score_text(string: &str) -> usize {
+pub fn score_text(string_data: &[u8]) -> usize {
     let mut score: usize = 0;
-    for ch in string.chars() {
-        match ch {
-            ' ' => score += 7,
-            'e' => score += 6,
-            'E' => score += 6,
-            't' => score += 5,
-            'T' => score += 5,
-            'a' => score += 4,
-            'A' => score += 4,
-            'o' => score += 3,
-            'O' => score += 3,
-            'i' => score += 2,
-            'I' => score += 2,
-            'n' => score += 1,
-            'N' => score += 1,
-            _ => score += 0,
+    if let Ok(string) = str::from_utf8(string_data) {
+        for ch in string.chars() {
+            match ch {
+                ' ' => score += 7,
+                'e' => score += 6,
+                'E' => score += 6,
+                't' => score += 5,
+                'T' => score += 5,
+                'a' => score += 4,
+                'A' => score += 4,
+                'o' => score += 3,
+                'O' => score += 3,
+                'i' => score += 2,
+                'I' => score += 2,
+                'n' => score += 1,
+                'N' => score += 1,
+                _ => score += 0,
+            }
         }
     }
 
@@ -96,12 +98,9 @@ pub fn decrypt_xor(key: &u8, ciphertext: &[u8]) -> Vec<u8> {
 }
 
 // Decrypt using the key and return the score and decrypted value, or None if the decryption failed
-fn get_score(key: &u8, ciphertext: &[u8]) -> Option<(usize, String)> {
-    if let Ok(string) = str::from_utf8(&decrypt_xor(&key, &ciphertext)) {
-        Some((score_text(string), string.to_string()))
-    } else {
-        None
-    }
+fn get_score(key: &u8, ciphertext: &[u8]) -> (usize, Vec<u8>) {
+    let string = decrypt_xor(&key, &ciphertext);
+    (score_text(&string), string)
 }
 
 // Iterate through a list of keys, and try each key in turn, returning the highest-scoring
@@ -112,21 +111,20 @@ fn try_decrypt_against_key_list<F>(
     key_generator: F,
     current_score: usize,
     current_key: u8,
-    current_decrypted: String,
-) -> (usize, u8, String)
+    current_decrypted: &[u8],
+) -> (usize, u8, Vec<u8>)
 where
     F: Fn(&u8) -> u8,
 {
     let (score, key, decrypted) = key_list.iter().fold(
-        (current_score, current_key, current_decrypted),
+        (current_score, current_key, current_decrypted.to_vec()),
         |(mut score, mut key, mut decrypted), byte| {
             let test_key = key_generator(byte);
-            if let Some((test_score, test_decrypted)) = get_score(&test_key, ciphertext) {
-                if test_score > score {
-                    score = test_score;
-                    key = test_key;
-                    decrypted = test_decrypted;
-                }
+            let (test_score, test_decrypted) = get_score(&test_key, ciphertext);
+            if test_score > score {
+                score = test_score;
+                key = test_key;
+                decrypted = test_decrypted;
             }
 
             (score, key, decrypted)
@@ -140,10 +138,10 @@ fn try_decrypt_with_test_string(
     ciphertext: &[u8],
     test_string: &[u8],
     key_list: &[u8],
-) -> Option<(usize, u8, String)> {
+) -> Option<(usize, u8, Vec<u8>)> {
     // Try each key in the key list against each
     let (score, key, decrypted) = test_string.into_iter().fold(
-        (0, 0u8, String::new()),
+        (0, 0u8, Vec::<u8>::new()),
         |(score, key, decrypted), value| {
             // Iterate over the key list,
             let (local_score, local_key, local_decrypted) = try_decrypt_against_key_list(
@@ -152,7 +150,7 @@ fn try_decrypt_with_test_string(
                 |b| b ^ value,
                 score,
                 key,
-                decrypted.clone(),
+                &decrypted.clone(),
             );
             if local_score > score {
                 (local_score, local_key, local_decrypted)
@@ -170,46 +168,114 @@ fn try_decrypt_with_test_string(
 }
 
 // Try to brute force the decryption by iterating through all 255 keys
-pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
+pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, Vec<u8>)> {
     Some(try_decrypt_against_key_list(
         ciphertext,
         &(0u8..255u8).collect::<Vec<u8>>(),
         |b| *b,
         0,
         0,
-        String::new(),
+        &Vec::<u8>::new(),
     ))
 }
 
 // Find the key by finding the most frequent chars in the ciphertext
 // and then test them against a list of the most frequent characters in English
-pub fn find_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, String)> {
+pub fn find_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, Vec<u8>)> {
     let histogram = get_character_histogram(&ciphertext);
     let etaoin = " eEtTaAoOiInN".as_bytes();
 
     try_decrypt_with_test_string(ciphertext, &histogram, etaoin)
 }
 
-pub fn encrypt_repeating_key_xor(key: &str, plaintext: &str) -> String {
-    let repeat = (plaintext.len() as f32 / key.len() as f32).ceil() as usize;
-    let mut repeated_key = std::iter::repeat(key).take(repeat).collect::<String>();
-    repeated_key.truncate(plaintext.len());
-    hex::encode(&plaintext
-        .bytes()
-        .zip(repeated_key.bytes())
+pub fn encrypt_decrypt_repeating_key_xor(key: &[u8], plain_or_ciphertext: &[u8]) -> Vec<u8> {
+    let repeat = (plain_or_ciphertext.len() as f32 / key.len() as f32).ceil() as usize;
+    let mut repeated_key = std::iter::repeat(key).take(repeat).fold(
+        Vec::<u8>::new(),
+        |mut v, b| {
+            v.append(&mut b.to_vec());
+            v
+        },
+    );
+    repeated_key.truncate(plain_or_ciphertext.len());
+    plain_or_ciphertext
+        .iter()
+        .zip(repeated_key.iter())
         .map(|(a, b)| a ^ b)
-        .collect::<Vec<u8>>())
+        .collect::<Vec<u8>>()
+}
+
+pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> usize {
+    string1
+        .iter()
+        .zip(string2.iter())
+        .fold(0, |mut acc, (a, b)| {
+            acc += (a ^ b).count_ones() as usize;
+            acc
+        })
+}
+
+// Returns a list of the keysizes, ordered by distance
+pub fn find_repeating_xor_keysize(string: &[u8]) -> Vec<usize> {
+    let keysizes = 2..40;
+    let mut keysize_distance_list = keysizes
+        .map(|keysize| {
+            let (even, odd): (Vec<(usize, &[u8])>, Vec<(usize, &[u8])>) = string
+                .chunks(keysize)
+                .enumerate()
+                .partition(|(i, _)| i % 2 == 0);
+            let distance = even.into_iter().zip(odd.into_iter()).fold(
+                0usize,
+                |mut acc, ((_, first), (_, second))| {
+                    acc += hamming_distance(&first, &second);
+                    acc
+                },
+            );
+            let normalized = distance as f32 / string.len() as f32;
+            (keysize, normalized)
+        })
+        .collect::<Vec<(usize, f32)>>();
+    keysize_distance_list.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+    keysize_distance_list
+        .iter()
+        .map(|(keysize, _)| *keysize)
+        .collect::<Vec<usize>>()
+}
+
+pub fn break_repeating_key_xor(ciphertext: &[u8], keysize: usize) -> Vec<u8> {
+    let mut vector_of_vectors: Vec<Vec<u8>> = Vec::new();
+    for _ in 0..keysize {
+        vector_of_vectors.push(Vec::new());
+    }
+    ciphertext.iter().enumerate().for_each(|(index, value)| {
+        let chunk_index = index % keysize;
+        vector_of_vectors[chunk_index].push(*value);
+    });
+    let key = vector_of_vectors
+        .iter()
+        .fold(vec![] as Vec<u8>, |mut key, string| {
+            let (_, k, _) = find_xor_key(&string).unwrap();
+            key.push(k);
+            key
+        });
+    key
 }
 
 #[cfg(test)]
 mod tests {
+    use base64;
+    use break_repeating_key_xor;
     //use brute_force_xor_key;
-    use encrypt_repeating_key_xor;
+    use encrypt_decrypt_repeating_key_xor;
+    use find_repeating_xor_keysize;
     use find_xor_key;
+    use hamming_distance;
     use hex;
     use hex_to_base64;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
+    use str;
     use xor;
 
     // First cryptopals challenge - https://cryptopals.com/sets/1/challenges/1
@@ -238,14 +304,17 @@ mod tests {
         let ciphertext = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736";
         let ciphertext_bin = hex::decode(ciphertext).unwrap();
         let (_, _, decrypted) = find_xor_key(&ciphertext_bin).unwrap();
-        assert_eq!("Cooking MC's like a pound of bacon", decrypted);
+        assert_eq!(
+            "Cooking MC's like a pound of bacon",
+            str::from_utf8(&decrypted).unwrap()
+        );
     }
 
     // Fourth cryptopals challenge - https://cryptopals.com/sets/1/challenges/4
     #[test]
     fn test_detect_single_char_xor() {
         let mut score = 0;
-        let mut string = "".to_string();
+        let mut string = vec![];
         for line in BufReader::new(File::open("data/4.txt").unwrap()).lines() {
             if let Some((s, _, decrypted)) = find_xor_key(&hex::decode(line.unwrap()).unwrap()) {
                 if s > score {
@@ -254,7 +323,10 @@ mod tests {
                 }
             }
         }
-        assert_eq!("Now that the party is jumping\n", string);
+        assert_eq!(
+            "Now that the party is jumping\n",
+            str::from_utf8(&string).unwrap()
+        );
     }
 
     // Fifth cryptopals challenge - https://cryptopals.com/sets/1/challenges/5
@@ -265,8 +337,44 @@ mod tests {
         let ciphertext =
             "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272\
              a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f";
-        let key = "ICE";
-        let encrypted = encrypt_repeating_key_xor(key, plaintext);
+        let key: &str = "ICE";
+        let encrypted = hex::encode(&encrypt_decrypt_repeating_key_xor(
+            &key.bytes().collect::<Vec<u8>>(),
+            &plaintext.bytes().collect::<Vec<u8>>(),
+        ));
         assert_eq!(ciphertext, encrypted);
+    }
+
+    #[test]
+    fn test_hamming() {
+        let string1 = "this is a test";
+        let string2 = "wokka wokka!!!";
+        assert_eq!(
+            37,
+            hamming_distance(
+                &string1.bytes().collect::<Vec<u8>>(),
+                &string2.bytes().collect::<Vec<u8>>()
+            )
+        );
+    }
+
+    // Sixth cryptopals challenge - https://cryptopals.com/sets/1/challenges/6
+    #[test]
+    fn test_break_repeating_key_xor() {
+        let mut data: Vec<u8> = vec![];
+        for line in BufReader::new(File::open("data/6.txt").unwrap()).lines() {
+            data.append(&mut base64::decode(&line.unwrap()).unwrap());
+        }
+        let keysize_list = find_repeating_xor_keysize(&data)
+            .into_iter()
+            .take(4)
+            .collect::<Vec<usize>>();
+        let key = break_repeating_key_xor(&data, keysize_list[0]);
+        let plaintext = encrypt_decrypt_repeating_key_xor(&key, &data);
+        assert!(
+            str::from_utf8(&plaintext)
+                .unwrap()
+                .starts_with("I'm back and I'm ringin' the bell")
+        );
     }
 }
