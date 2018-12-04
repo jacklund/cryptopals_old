@@ -1,4 +1,5 @@
 extern crate base64;
+extern crate crypto;
 extern crate hex;
 extern crate is_sorted;
 
@@ -281,6 +282,9 @@ mod tests {
     use base64;
     use break_repeating_key_xor;
     //use brute_force_xor_key;
+    use crypto;
+    use crypto::buffer::ReadBuffer;
+    use crypto::buffer::WriteBuffer;
     use encrypt_decrypt_repeating_key_xor;
     use find_repeating_xor_keysize;
     use find_xor_key;
@@ -387,6 +391,44 @@ mod tests {
         let plaintext = encrypt_decrypt_repeating_key_xor(&key, &data);
         assert!(
             str::from_utf8(&plaintext)
+                .unwrap()
+                .starts_with("I'm back and I'm ringin' the bell")
+        );
+    }
+
+    // Seventh cryptopals challenge - https://cryptopals.com/sets/1/challenges/7
+    #[test]
+    fn test_decrypt_aes_128_ecb() {
+        let mut data: Vec<u8> = vec![];
+        for line in BufReader::new(File::open("data/7.txt").unwrap()).lines() {
+            data.append(&mut base64::decode(&line.unwrap()).unwrap());
+        }
+        println!("{:?}", data.len());
+        let key = "YELLOW SUBMARINE".as_bytes();
+        let mut decryptor = crypto::aes::ecb_decryptor(
+            crypto::aes::KeySize::KeySize128,
+            key,
+            crypto::blockmodes::NoPadding,
+        );
+        let mut output = Vec::<u8>::new();
+        let mut buffer = [0; 4096];
+        let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
+        decryptor
+            .decrypt(
+                &mut crypto::buffer::RefReadBuffer::new(&mut data),
+                &mut write_buffer,
+                true,
+            )
+            .unwrap();
+        output.extend(
+            write_buffer
+                .take_read_buffer()
+                .take_remaining()
+                .iter()
+                .map(|&i| i),
+        );
+        assert!(
+            str::from_utf8(&output)
                 .unwrap()
                 .starts_with("I'm back and I'm ringin' the bell")
         );
