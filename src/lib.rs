@@ -9,6 +9,7 @@ use crypto::symmetriccipher::SymmetricCipherError;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::iter;
 use std::str;
 
 #[derive(Debug)]
@@ -308,6 +309,12 @@ pub fn aes_128_ecb_decrypt(
     Ok(output)
 }
 
+pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
+    let mut ret = string.to_vec();
+    ret.extend(iter::repeat('\x04' as u8).take(blocksize - (string.len() % blocksize)));
+    ret
+}
+
 #[cfg(test)]
 mod tests {
     use aes_128_ecb_decrypt;
@@ -320,6 +327,7 @@ mod tests {
     use hamming_distance;
     use hex;
     use hex_to_base64;
+    use pkcs7_pad;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
     use str;
@@ -467,6 +475,15 @@ mod tests {
             found
                 .unwrap()
                 .starts_with("d880619740a8a19b7840a8a31c810a3d08649")
+        );
+    }
+
+    // Ninth cryptopals challenge - https://cryptopals.com/sets/2/challenges/9
+    #[test]
+    fn test_pkcs7_padding() {
+        assert_eq!(
+            "YELLOW SUBMARINE\x04\x04\x04\x04",
+            str::from_utf8(&pkcs7_pad(&"YELLOW SUBMARINE".as_bytes(), 20)).unwrap()
         );
     }
 }
