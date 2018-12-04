@@ -3,6 +3,9 @@ extern crate crypto;
 extern crate hex;
 extern crate is_sorted;
 
+use crypto::buffer::ReadBuffer;
+use crypto::buffer::WriteBuffer;
+use crypto::symmetriccipher::SymmetricCipherError;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -277,14 +280,40 @@ pub fn break_repeating_key_xor(ciphertext: &[u8], keysize: usize) -> Vec<u8> {
     key
 }
 
+pub fn aes_128_ecb_decrypt(
+    key: &[u8],
+    mut ciphertext: &[u8],
+) -> Result<Vec<u8>, SymmetricCipherError> {
+    let mut decryptor = crypto::aes::ecb_decryptor(
+        crypto::aes::KeySize::KeySize128,
+        key,
+        crypto::blockmodes::NoPadding,
+    );
+    let mut output = Vec::<u8>::new();
+    let mut buffer = [0; 4096];
+    let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
+    decryptor.decrypt(
+        &mut crypto::buffer::RefReadBuffer::new(&mut ciphertext),
+        &mut write_buffer,
+        true,
+    )?;
+    output.extend(
+        write_buffer
+            .take_read_buffer()
+            .take_remaining()
+            .iter()
+            .map(|&i| i),
+    );
+
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
+    use aes_128_ecb_decrypt;
     use base64;
     use break_repeating_key_xor;
     //use brute_force_xor_key;
-    use crypto;
-    use crypto::buffer::ReadBuffer;
-    use crypto::buffer::WriteBuffer;
     use encrypt_decrypt_repeating_key_xor;
     use find_repeating_xor_keysize;
     use find_xor_key;
@@ -404,29 +433,7 @@ mod tests {
             data.append(&mut base64::decode(&line.unwrap()).unwrap());
         }
         println!("{:?}", data.len());
-        let key = "YELLOW SUBMARINE".as_bytes();
-        let mut decryptor = crypto::aes::ecb_decryptor(
-            crypto::aes::KeySize::KeySize128,
-            key,
-            crypto::blockmodes::NoPadding,
-        );
-        let mut output = Vec::<u8>::new();
-        let mut buffer = [0; 4096];
-        let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
-        decryptor
-            .decrypt(
-                &mut crypto::buffer::RefReadBuffer::new(&mut data),
-                &mut write_buffer,
-                true,
-            )
-            .unwrap();
-        output.extend(
-            write_buffer
-                .take_read_buffer()
-                .take_remaining()
-                .iter()
-                .map(|&i| i),
-        );
+        let output = aes_128_ecb_decrypt("YELLOW SUBMARINE".as_bytes(), &mut data).unwrap();
         assert!(
             str::from_utf8(&output)
                 .unwrap()
