@@ -9,6 +9,8 @@ use crypto::symmetriccipher::SymmetricCipherError;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::iter;
 use std::str;
 
@@ -32,22 +34,27 @@ pub fn hex_to_base64(hex_string: &str) -> Result<String, Box<Error>> {
     Ok(base64::encode(&binary))
 }
 
-pub fn xor(first_hex: &str, second_hex: &str) -> Result<String, Box<Error>> {
-    if first_hex.len() != second_hex.len() {
+pub fn xor(first: &[u8], second: &[u8]) -> Result<Vec<u8>, Box<Error>> {
+    if first.len() != second.len() {
         return Err(
             CryptoError::XorError("Strings being xor-ed must be same size".to_string()).into(),
         );
     }
-    let first: Vec<u8> = hex::decode(first_hex)?;
-    let second: Vec<u8> = hex::decode(second_hex)?;
 
-    Ok(hex::encode(
-        first
-            .into_iter()
-            .zip(second.into_iter())
-            .map(|(x, y)| x ^ y)
-            .collect::<Vec<u8>>(),
-    ))
+    Ok(first
+        .into_iter()
+        .zip(second.into_iter())
+        .map(|(x, y)| x ^ y)
+        .collect::<Vec<u8>>())
+}
+
+pub fn read_file(filename: &str) -> Vec<u8> {
+    let mut data: Vec<u8> = vec![];
+    for line in BufReader::new(File::open(filename).unwrap()).lines() {
+        data.append(&mut base64::decode(&line.unwrap()).unwrap());
+    }
+
+    data
 }
 
 // Get a list of the characters in the string, ordered by frequency
@@ -309,6 +316,34 @@ pub fn aes_128_ecb_decrypt(
     Ok(output)
 }
 
+pub fn aes_128_ecb_encrypt(
+    key: &[u8],
+    mut plaintext: &[u8],
+) -> Result<Vec<u8>, SymmetricCipherError> {
+    let mut encryptor = crypto::aes::ecb_encryptor(
+        crypto::aes::KeySize::KeySize128,
+        key,
+        crypto::blockmodes::NoPadding,
+    );
+    let mut output = Vec::<u8>::new();
+    let mut buffer = [0; 4096];
+    let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
+    encryptor.encrypt(
+        &mut crypto::buffer::RefReadBuffer::new(&mut plaintext),
+        &mut write_buffer,
+        true,
+    )?;
+    output.extend(
+        write_buffer
+            .take_read_buffer()
+            .take_remaining()
+            .iter()
+            .map(|&i| i),
+    );
+
+    Ok(output)
+}
+
 pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     let mut ret = string.to_vec();
     ret.extend(iter::repeat('\x04' as u8).take(blocksize - (string.len() % blocksize)));
@@ -318,6 +353,7 @@ pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use aes_128_ecb_decrypt;
+    use aes_128_ecb_encrypt;
     use base64;
     use break_repeating_key_xor;
     //use brute_force_xor_key;
@@ -328,6 +364,8 @@ mod tests {
     use hex;
     use hex_to_base64;
     use pkcs7_pad;
+    use read_file;
+    use std;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
     use str;
@@ -345,10 +383,12 @@ mod tests {
     #[test]
     fn test_xor() {
         assert_eq!(
-            xor(
-                "1c0111001f010100061a024b53535009181c",
-                "686974207468652062756c6c277320657965"
-            ).unwrap(),
+            hex::encode(
+                xor(
+                    &hex::decode("1c0111001f010100061a024b53535009181c").unwrap(),
+                    &hex::decode("686974207468652062756c6c277320657965").unwrap()
+                ).unwrap()
+            ),
             "746865206b696420646f6e277420706c6179"
         );
     }
@@ -416,10 +456,7 @@ mod tests {
     // Sixth cryptopals challenge - https://cryptopals.com/sets/1/challenges/6
     #[test]
     fn test_break_repeating_key_xor() {
-        let mut data: Vec<u8> = vec![];
-        for line in BufReader::new(File::open("data/6.txt").unwrap()).lines() {
-            data.append(&mut base64::decode(&line.unwrap()).unwrap());
-        }
+        let data = read_file("data/6.txt");
         let keysize_list = find_repeating_xor_keysize(&data)
             .into_iter()
             .take(4)
@@ -436,11 +473,7 @@ mod tests {
     // Seventh cryptopals challenge - https://cryptopals.com/sets/1/challenges/7
     #[test]
     fn test_decrypt_aes_128_ecb() {
-        let mut data: Vec<u8> = vec![];
-        for line in BufReader::new(File::open("data/7.txt").unwrap()).lines() {
-            data.append(&mut base64::decode(&line.unwrap()).unwrap());
-        }
-        println!("{:?}", data.len());
+        let mut data = read_file("data/7.txt");
         let output = aes_128_ecb_decrypt("YELLOW SUBMARINE".as_bytes(), &mut data).unwrap();
         assert!(
             str::from_utf8(&output)
@@ -484,6 +517,39 @@ mod tests {
         assert_eq!(
             "YELLOW SUBMARINE\x04\x04\x04\x04",
             str::from_utf8(&pkcs7_pad(&"YELLOW SUBMARINE".as_bytes(), 20)).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_ecb_encrypt() {
+        let key = "YELLOW SUBMARINE".as_bytes();
+        let plaintext = "Hello World Jack";
+        let ciphertext = aes_128_ecb_encrypt(&key, &plaintext.as_bytes()).unwrap();
+        assert_eq!(
+            plaintext,
+            str::from_utf8(&aes_128_ecb_decrypt(&key, &ciphertext).unwrap()).unwrap()
+        );
+    }
+
+    // Tenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/10
+    #[test]
+    fn test_decrypt_cbc_mode() {
+        let key = "YELLOW SUBMARINE".as_bytes();
+        let ciphertext = read_file("data/10.txt");
+        let chunks = ciphertext
+            .chunks(16)
+            .map(|c| c.to_vec())
+            .collect::<Vec<Vec<u8>>>();
+        let mut iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
+        let mut plaintext = Vec::<u8>::new();
+        for chunk in chunks {
+            plaintext.extend(xor(&aes_128_ecb_decrypt(&key, &chunk).unwrap(), &iv).unwrap());
+            iv = chunk;
+        }
+        assert!(
+            str::from_utf8(&plaintext)
+                .unwrap()
+                .starts_with("I'm back and I'm ringin' the bell")
         );
     }
 }
