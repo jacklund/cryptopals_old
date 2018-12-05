@@ -1,7 +1,10 @@
+#![feature(iterator_repeat_with)]
+
 extern crate base64;
 extern crate crypto;
 extern crate hex;
 extern crate is_sorted;
+extern crate rand;
 
 use crypto::buffer::ReadBuffer;
 use crypto::buffer::WriteBuffer;
@@ -36,6 +39,7 @@ pub fn hex_to_base64(hex_string: &str) -> Result<String, Box<Error>> {
 
 pub fn xor(first: &[u8], second: &[u8]) -> Result<Vec<u8>, Box<Error>> {
     if first.len() != second.len() {
+        println!("first: {}, second: {}", first.len(), second.len());
         return Err(
             CryptoError::XorError("Strings being xor-ed must be same size".to_string()).into(),
         );
@@ -48,7 +52,7 @@ pub fn xor(first: &[u8], second: &[u8]) -> Result<Vec<u8>, Box<Error>> {
         .collect::<Vec<u8>>())
 }
 
-pub fn read_file(filename: &str) -> Vec<u8> {
+pub fn read_base64_file(filename: &str) -> Vec<u8> {
     let mut data: Vec<u8> = vec![];
     for line in BufReader::new(File::open(filename).unwrap()).lines() {
         data.append(&mut base64::decode(&line.unwrap()).unwrap());
@@ -316,10 +320,7 @@ pub fn aes_128_ecb_decrypt(
     Ok(output)
 }
 
-pub fn aes_128_ecb_encrypt(
-    key: &[u8],
-    mut plaintext: &[u8],
-) -> Result<Vec<u8>, SymmetricCipherError> {
+pub fn aes_128_ecb_encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
     let mut encryptor = crypto::aes::ecb_encryptor(
         crypto::aes::KeySize::KeySize128,
         key,
@@ -328,8 +329,9 @@ pub fn aes_128_ecb_encrypt(
     let mut output = Vec::<u8>::new();
     let mut buffer = [0; 4096];
     let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
+    let mut padded_plaintext = pkcs7_pad(&plaintext, 16);
     encryptor.encrypt(
-        &mut crypto::buffer::RefReadBuffer::new(&mut plaintext),
+        &mut crypto::buffer::RefReadBuffer::new(&mut padded_plaintext),
         &mut write_buffer,
         true,
     )?;
@@ -344,30 +346,117 @@ pub fn aes_128_ecb_encrypt(
     Ok(output)
 }
 
+pub fn detect_aes_ecb(ciphertext: &[u8]) -> bool {
+    let chunks = ciphertext
+        .chunks(16)
+        .map(|c| c.to_vec())
+        .collect::<Vec<Vec<u8>>>();
+    for (index, chunk1) in chunks.iter().enumerate() {
+        for chunk2 in chunks[index + 1..].to_vec() {
+            if *chunk1 == chunk2 {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+pub fn aes_128_cbc_decrypt(
+    key: &[u8],
+    iv: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, SymmetricCipherError> {
+    let chunks = ciphertext
+        .chunks(16)
+        .map(|c| c.to_vec())
+        .collect::<Vec<Vec<u8>>>();
+    let mut plaintext = Vec::<u8>::new();
+    let mut vector = iv.to_vec();
+    for chunk in chunks {
+        plaintext.extend(xor(&aes_128_ecb_decrypt(&key, &chunk).unwrap(), &vector).unwrap());
+        vector = chunk;
+    }
+
+    Ok(plaintext)
+}
+
+pub fn aes_128_cbc_encrypt(
+    key: &[u8],
+    iv: &[u8],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, SymmetricCipherError> {
+    println!("plaintext len = {}", plaintext.len());
+    let chunks = pkcs7_pad(&plaintext, iv.len())
+        .chunks(16)
+        .map(|c| c.to_vec())
+        .collect::<Vec<Vec<u8>>>();
+    let mut ciphertext = Vec::<u8>::new();
+    let mut vector = iv.to_vec();
+    for chunk in chunks {
+        let cipher_chunk = aes_128_ecb_encrypt(&key, &xor(&chunk, &vector).unwrap())?;
+        ciphertext.extend(cipher_chunk.clone());
+        vector = cipher_chunk;
+    }
+
+    Ok(ciphertext)
+}
+
 pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     let mut ret = string.to_vec();
-    ret.extend(iter::repeat('\x04' as u8).take(blocksize - (string.len() % blocksize)));
+    ret.extend(
+        iter::repeat('\x04' as u8).take((blocksize - (string.len() % blocksize)) % blocksize),
+    );
     ret
+}
+
+pub fn generate_random_bytes(size: usize) -> Vec<u8> {
+    iter::repeat_with(|| rand::random::<u8>())
+        .take(size)
+        .collect::<Vec<u8>>()
+}
+
+pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, bool), SymmetricCipherError> {
+    let mut new_plaintext = generate_random_bytes((rand::random::<f32>() * 5.0) as usize + 5);
+    new_plaintext.extend(plaintext);
+    new_plaintext.extend(generate_random_bytes(
+        (rand::random::<f32>() * 5.0) as usize + 5,
+    ));
+    if rand::random() {
+        Ok((
+            aes_128_ecb_encrypt(&generate_random_bytes(16), &new_plaintext)?,
+            true,
+        ))
+    } else {
+        let iv = generate_random_bytes(16);
+        Ok((
+            aes_128_cbc_encrypt(&generate_random_bytes(16), &iv, &new_plaintext)?,
+            false,
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use aes_128_cbc_decrypt;
+    use aes_128_cbc_encrypt;
     use aes_128_ecb_decrypt;
     use aes_128_ecb_encrypt;
     use base64;
     use break_repeating_key_xor;
     //use brute_force_xor_key;
+    use detect_aes_ecb;
     use encrypt_decrypt_repeating_key_xor;
+    use encryption_oracle;
     use find_repeating_xor_keysize;
     use find_xor_key;
     use hamming_distance;
     use hex;
     use hex_to_base64;
     use pkcs7_pad;
-    use read_file;
+    use read_base64_file;
     use std;
     use std::fs::File;
-    use std::io::{BufRead, BufReader};
+    use std::io::{BufRead, BufReader, Read};
     use str;
     use xor;
 
@@ -456,7 +545,7 @@ mod tests {
     // Sixth cryptopals challenge - https://cryptopals.com/sets/1/challenges/6
     #[test]
     fn test_break_repeating_key_xor() {
-        let data = read_file("data/6.txt");
+        let data = read_base64_file("data/6.txt");
         let keysize_list = find_repeating_xor_keysize(&data)
             .into_iter()
             .take(4)
@@ -473,7 +562,7 @@ mod tests {
     // Seventh cryptopals challenge - https://cryptopals.com/sets/1/challenges/7
     #[test]
     fn test_decrypt_aes_128_ecb() {
-        let mut data = read_file("data/7.txt");
+        let mut data = read_base64_file("data/7.txt");
         let output = aes_128_ecb_decrypt("YELLOW SUBMARINE".as_bytes(), &mut data).unwrap();
         assert!(
             str::from_utf8(&output)
@@ -489,19 +578,9 @@ mod tests {
         for line in BufReader::new(File::open("data/8.txt").unwrap()).lines() {
             let real_line = line.unwrap();
             let data = base64::decode(&real_line.clone()).unwrap();
-            let chunks = data.chunks(16)
-                .map(|c| c.to_vec())
-                .collect::<Vec<Vec<u8>>>();
-            for (index, chunk1) in chunks.iter().enumerate() {
-                for chunk2 in chunks[index + 1..].to_vec() {
-                    if *chunk1 == chunk2 {
-                        found = Some(real_line.clone());
-                        break;
-                    }
-                }
-                if found.is_some() {
-                    break;
-                }
+            if detect_aes_ecb(&data) {
+                found = Some(real_line.clone());
+                break;
             }
         }
         assert!(
@@ -525,6 +604,7 @@ mod tests {
         let key = "YELLOW SUBMARINE".as_bytes();
         let plaintext = "Hello World Jack";
         let ciphertext = aes_128_ecb_encrypt(&key, &plaintext.as_bytes()).unwrap();
+        println!("{}, {:?}", ciphertext.len(), ciphertext);
         assert_eq!(
             plaintext,
             str::from_utf8(&aes_128_ecb_decrypt(&key, &ciphertext).unwrap()).unwrap()
@@ -535,21 +615,39 @@ mod tests {
     #[test]
     fn test_decrypt_cbc_mode() {
         let key = "YELLOW SUBMARINE".as_bytes();
-        let ciphertext = read_file("data/10.txt");
-        let chunks = ciphertext
-            .chunks(16)
-            .map(|c| c.to_vec())
-            .collect::<Vec<Vec<u8>>>();
-        let mut iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
-        let mut plaintext = Vec::<u8>::new();
-        for chunk in chunks {
-            plaintext.extend(xor(&aes_128_ecb_decrypt(&key, &chunk).unwrap(), &iv).unwrap());
-            iv = chunk;
-        }
+        let ciphertext = read_base64_file("data/10.txt");
+        let iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
+        let plaintext = aes_128_cbc_decrypt(&key, &iv, &ciphertext).unwrap();
         assert!(
             str::from_utf8(&plaintext)
                 .unwrap()
                 .starts_with("I'm back and I'm ringin' the bell")
         );
+    }
+
+    #[test]
+    fn test_encrypt_cbc_mode() {
+        let key = "YELLOW SUBMARINE".as_bytes();
+        let plaintext = "Hello World Jack";
+        let iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
+        let ciphertext = aes_128_cbc_encrypt(&key, &iv, &plaintext.as_bytes()).unwrap();
+        assert_eq!(
+            plaintext,
+            str::from_utf8(&aes_128_cbc_decrypt(&key, &iv, &ciphertext).unwrap()).unwrap()
+        );
+    }
+
+    // Eleventh cryptopals challenge - https://cryptopals.com/sets/2/challenges/11
+    #[test]
+    fn test_detect_ecb_cbc() {
+        let mut plaintext = String::new();
+        File::open("data/11.txt")
+            .unwrap()
+            .read_to_string(&mut plaintext)
+            .unwrap();
+        for _ in 0..100 {
+            let (ciphertext, is_ecb) = encryption_oracle(&plaintext.as_bytes()).unwrap();
+            assert_eq!(is_ecb, detect_aes_ecb(&ciphertext));
+        }
     }
 }
