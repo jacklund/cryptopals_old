@@ -435,6 +435,48 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, bool), SymmetricC
     }
 }
 
+const UNKNOWN_STRING_BASE64: &str =
+    "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg\
+     aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq\
+     dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
+
+pub fn encrypt_with_string(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
+    let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
+    let mut full_plaintext = plaintext.to_vec();
+    full_plaintext.extend(unknown_string);
+    aes_128_ecb_encrypt(key, &full_plaintext)
+}
+
+pub fn decrypt_ecb_byte_at_a_time(blocksize: usize) -> Vec<u8> {
+    let key = generate_random_bytes(blocksize);
+    let total_size = encrypt_with_string(&key, &vec![]).unwrap().len();
+    let mut solution = Vec::<u8>::new();
+    for pos in 1usize..total_size {
+        let mut test_string = iter::repeat('A' as u8)
+            .take(total_size - pos)
+            .collect::<Vec<u8>>();
+        let mut ciphertext = encrypt_with_string(&key, &test_string).unwrap();
+        test_string.extend(solution.clone());
+        test_string.push(0u8);
+        loop {
+            let test_ciphertext = encrypt_with_string(&key, &test_string).unwrap();
+            if test_ciphertext[..total_size] == ciphertext[..total_size] {
+                if test_string[total_size - 1] == 4u8 {
+                    return solution; // We've hit the padding
+                }
+                solution.push(test_string[total_size - 1]);
+                break;
+            }
+            if test_string[total_size - 1] as char == '~' {
+                assert!(false);
+            }
+            test_string[total_size - 1] += 1;
+        }
+    }
+
+    solution
+}
+
 #[cfg(test)]
 mod tests {
     use aes_128_cbc_decrypt;
@@ -444,14 +486,18 @@ mod tests {
     use base64;
     use break_repeating_key_xor;
     //use brute_force_xor_key;
+    use decrypt_ecb_byte_at_a_time;
     use detect_aes_ecb;
     use encrypt_decrypt_repeating_key_xor;
+    use encrypt_with_string;
     use encryption_oracle;
     use find_repeating_xor_keysize;
     use find_xor_key;
+    use generate_random_bytes;
     use hamming_distance;
     use hex;
     use hex_to_base64;
+    use iter;
     use pkcs7_pad;
     use read_base64_file;
     use std;
@@ -649,5 +695,37 @@ mod tests {
             let (ciphertext, is_ecb) = encryption_oracle(&plaintext.as_bytes()).unwrap();
             assert_eq!(is_ecb, detect_aes_ecb(&ciphertext));
         }
+    }
+
+    // Twelfth cryptopals challenge - https://cryptopals.com/sets/2/challenges/12
+    #[test]
+    fn test_byte_at_a_time_ecb_decryption() {
+        let solution_string = "Rollin' in my 5.0\n\
+                               With my rag-top down so my hair can blow\n\
+                               The girlies on standby waving just to say hi\n\
+                               Did you stop? No, I just drove by\n";
+        let key = generate_random_bytes(16);
+        let mut plaintext = Vec::<u8>::new();
+        let initial = encrypt_with_string(&key, &plaintext).unwrap().len();
+        let blocksize;
+        let mut ciphertext;
+        loop {
+            plaintext.push(0u8);
+            ciphertext = encrypt_with_string(&key, &plaintext).unwrap();
+            if ciphertext.len() != initial {
+                blocksize = ciphertext.len() - initial;
+                break;
+            }
+        }
+        assert_eq!(16, blocksize);
+        ciphertext = encrypt_with_string(
+            &key,
+            &iter::repeat(0u8).take(2 * blocksize).collect::<Vec<u8>>(),
+        ).unwrap();
+        assert!(detect_aes_ecb(&ciphertext));
+        assert_eq!(
+            solution_string,
+            str::from_utf8(&decrypt_ecb_byte_at_a_time(blocksize)).unwrap()
+        );
     }
 }
