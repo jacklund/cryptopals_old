@@ -447,19 +447,19 @@ pub fn encrypt_with_string(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Symm
     aes_128_ecb_encrypt(key, &full_plaintext)
 }
 
-pub fn decrypt_ecb_byte_at_a_time(blocksize: usize) -> Vec<u8> {
+pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(blocksize: usize, encrypt_fn: F) -> Vec<u8> {
     let key = generate_random_bytes(blocksize);
-    let total_size = encrypt_with_string(&key, &vec![]).unwrap().len();
+    let total_size = encrypt_fn(&key, &vec![]).unwrap().len();
     let mut solution = Vec::<u8>::new();
     for pos in 1usize..total_size {
         let mut test_string = iter::repeat('A' as u8)
             .take(total_size - pos)
             .collect::<Vec<u8>>();
-        let mut ciphertext = encrypt_with_string(&key, &test_string).unwrap();
+        let mut ciphertext = encrypt_fn(&key, &test_string).unwrap();
         test_string.extend(solution.clone());
         test_string.push(0u8);
         loop {
-            let test_ciphertext = encrypt_with_string(&key, &test_string).unwrap();
+            let test_ciphertext = encrypt_fn(&key, &test_string).unwrap();
             if test_ciphertext[..total_size] == ciphertext[..total_size] {
                 if test_string[total_size - 1] == 4u8 {
                     return solution; // We've hit the padding
@@ -477,6 +477,22 @@ pub fn decrypt_ecb_byte_at_a_time(blocksize: usize) -> Vec<u8> {
     solution
 }
 
+pub fn find_blocksize<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(encrypt_fn: F) -> Option<usize> {
+    let key = generate_random_bytes(16);
+    let mut plaintext = Vec::<u8>::new();
+    let initial = encrypt_fn(&key, &plaintext).unwrap().len();
+    let mut ciphertext;
+    for _ in 0..2048 {
+        plaintext.push(0u8);
+        ciphertext = encrypt_fn(&key, &plaintext).unwrap();
+        if ciphertext.len() != initial {
+            return Some(ciphertext.len() - initial);
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use aes_128_cbc_decrypt;
@@ -491,6 +507,7 @@ mod tests {
     use encrypt_decrypt_repeating_key_xor;
     use encrypt_with_string;
     use encryption_oracle;
+    use find_blocksize;
     use find_repeating_xor_keysize;
     use find_xor_key;
     use generate_random_bytes;
@@ -704,28 +721,17 @@ mod tests {
                                With my rag-top down so my hair can blow\n\
                                The girlies on standby waving just to say hi\n\
                                Did you stop? No, I just drove by\n";
-        let key = generate_random_bytes(16);
-        let mut plaintext = Vec::<u8>::new();
-        let initial = encrypt_with_string(&key, &plaintext).unwrap().len();
-        let blocksize;
-        let mut ciphertext;
-        loop {
-            plaintext.push(0u8);
-            ciphertext = encrypt_with_string(&key, &plaintext).unwrap();
-            if ciphertext.len() != initial {
-                blocksize = ciphertext.len() - initial;
-                break;
-            }
-        }
+        let blocksize = find_blocksize(encrypt_with_string).unwrap();
         assert_eq!(16, blocksize);
-        ciphertext = encrypt_with_string(
+        let key = generate_random_bytes(16);
+        let ciphertext = encrypt_with_string(
             &key,
             &iter::repeat(0u8).take(2 * blocksize).collect::<Vec<u8>>(),
         ).unwrap();
         assert!(detect_aes_ecb(&ciphertext));
         assert_eq!(
             solution_string,
-            str::from_utf8(&decrypt_ecb_byte_at_a_time(blocksize)).unwrap()
+            str::from_utf8(&decrypt_ecb_byte_at_a_time(blocksize, encrypt_with_string)).unwrap()
         );
     }
 }
