@@ -4,11 +4,13 @@ extern crate base64;
 extern crate crypto;
 extern crate hex;
 extern crate is_sorted;
+extern crate itertools;
 extern crate rand;
 
 use crypto::buffer::ReadBuffer;
 use crypto::buffer::WriteBuffer;
 use crypto::symmetriccipher::SymmetricCipherError;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -447,7 +449,10 @@ pub fn encrypt_with_string(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Symm
     aes_128_ecb_encrypt(key, &full_plaintext)
 }
 
-pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(blocksize: usize, encrypt_fn: F) -> Vec<u8> {
+pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
+    blocksize: usize,
+    encrypt_fn: F,
+) -> Vec<u8> {
     let key = generate_random_bytes(blocksize);
     let total_size = encrypt_fn(&key, &vec![]).unwrap().len();
     let mut solution = Vec::<u8>::new();
@@ -477,7 +482,9 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, Symmetr
     solution
 }
 
-pub fn find_blocksize<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(encrypt_fn: F) -> Option<usize> {
+pub fn find_blocksize<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
+    encrypt_fn: F,
+) -> Option<usize> {
     let key = generate_random_bytes(16);
     let mut plaintext = Vec::<u8>::new();
     let initial = encrypt_fn(&key, &plaintext).unwrap().len();
@@ -493,6 +500,26 @@ pub fn find_blocksize<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherErro
     None
 }
 
+pub fn parse_key_value(string: &str) -> HashMap<String, String> {
+    let mut ret = HashMap::<String, String>::new();
+    for kv in string.split('&').collect::<Vec<&str>>() {
+        let key_value = kv.split('=').collect::<Vec<&str>>();
+        ret.insert(key_value[0].to_string(), key_value[1].to_string());
+    }
+
+    ret
+}
+
+pub fn profile_for(email: &str, uid: usize, role: &str) -> String {
+    let sanitized = email.replace("&", "").replace("=", "");
+    let keys: Vec<String> = vec!["email".to_string(), "uid".to_string(), "role".to_string()];
+    let values: Vec<String> = vec![sanitized.to_string(), uid.to_string(), role.to_string()];
+    keys.iter()
+        .zip(values.iter())
+        .map(|(k, v)| format!("{}={}", k, v))
+        .join("&")
+}
+
 #[cfg(test)]
 mod tests {
     use aes_128_cbc_decrypt;
@@ -502,6 +529,7 @@ mod tests {
     use base64;
     use break_repeating_key_xor;
     //use brute_force_xor_key;
+    use crypto::symmetriccipher::SymmetricCipherError;
     use decrypt_ecb_byte_at_a_time;
     use detect_aes_ecb;
     use encrypt_decrypt_repeating_key_xor;
@@ -515,9 +543,12 @@ mod tests {
     use hex;
     use hex_to_base64;
     use iter;
+    use parse_key_value;
     use pkcs7_pad;
+    use profile_for;
     use read_base64_file;
     use std;
+    use std::collections::HashMap;
     use std::fs::File;
     use std::io::{BufRead, BufReader, Read};
     use str;
@@ -733,5 +764,76 @@ mod tests {
             solution_string,
             str::from_utf8(&decrypt_ecb_byte_at_a_time(blocksize, encrypt_with_string)).unwrap()
         );
+    }
+
+    #[test]
+    fn test_parse_key_value() {
+        let test_string = "foo=bar&baz=qux&zap=zazzle";
+        let map = parse_key_value(test_string);
+        assert_eq!("bar", map.get("foo").unwrap());
+        assert_eq!("qux", map.get("baz").unwrap());
+        assert_eq!("zazzle", map.get("zap").unwrap());
+    }
+
+    #[test]
+    fn test_key_value_encode() {
+        assert_eq!(
+            "email=foo@bar.com&uid=10&role=user",
+            profile_for("foo@bar.com", 10, "user")
+        );
+        assert_eq!(
+            "email=foo@bar.com&uid=10&role=user",
+            profile_for("foo&@bar=.com", 10, "user")
+        );
+    }
+
+    // Thirteenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/13
+    #[test]
+    fn test_ecb_cut_and_paste() {
+        let key = generate_random_bytes(16);
+        fn encrypt_user_profile(key: &[u8], email: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
+            let profile = profile_for(str::from_utf8(email).unwrap(), 10, "user");
+            aes_128_ecb_encrypt(key, profile.as_bytes())
+        }
+        fn decrypt_user_profile(
+            key: &[u8],
+            ciphertext: &[u8],
+        ) -> Result<HashMap<String, String>, SymmetricCipherError> {
+            let mut decrypted: Vec<u8> = aes_128_ecb_decrypt(key, ciphertext)?;
+            let mut last = decrypted.pop().unwrap();
+            while last == 4u8 {
+                last = decrypted.pop().unwrap();
+            }
+            decrypted.push(last);
+            Ok(parse_key_value(str::from_utf8(&decrypted).unwrap()))
+        }
+        let blocksize = find_blocksize(encrypt_user_profile).unwrap();
+        assert_eq!(16, blocksize);
+
+        // Want an email address that runs through the first block, with only 'admin', followed
+        // by padding, in the second
+        let mut test_email = iter::repeat('A' as u8)
+            .take(blocksize - 6)
+            .collect::<Vec<u8>>();
+        assert_eq!(10, test_email.len()); // + "email=" makes 16 bytes
+        test_email.extend("admin".as_bytes());
+        test_email.extend(iter::repeat(4u8).take(11).collect::<Vec<u8>>()); // Pad rest of second block
+        assert_eq!(26, test_email.len());
+        let encrypted = encrypt_user_profile(&key, &test_email).unwrap();
+        // Now take the second block
+        let admin_block = &encrypted[16..32];
+
+        // Next we want an email long enough to end the block with "role="
+        // so that's 32 - 19, so 13 bytes
+        test_email = iter::repeat('A' as u8).take(13).collect::<Vec<u8>>();
+        let encrypted_again = encrypt_user_profile(&key, &test_email).unwrap();
+
+        // We replace the third block with our admin block
+        let mut new_encrypted = encrypted_again[..32].to_vec();
+        new_encrypted.extend(admin_block);
+
+        let profile = decrypt_user_profile(&key, &new_encrypted).unwrap();
+
+        assert_eq!("admin", profile["role"]);
     }
 }
