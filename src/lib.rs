@@ -417,21 +417,44 @@ pub fn generate_random_bytes(size: usize) -> Vec<u8> {
         .collect::<Vec<u8>>()
 }
 
+pub enum EncryptionType {
+    ECB,
+    CBC(Vec<u8>),
+}
+
+pub fn encrypt_with_prefix_and_suffix(
+    key: &[u8],
+    prefix: &[u8],
+    plaintext: &[u8],
+    suffix: &[u8],
+    encryption_type: EncryptionType,
+) -> Result<Vec<u8>, SymmetricCipherError> {
+    let mut buffer = Vec::<u8>::new();
+    buffer.extend(prefix);
+    buffer.extend(plaintext);
+    buffer.extend(suffix);
+
+    match encryption_type {
+        EncryptionType::CBC(iv) => aes_128_cbc_encrypt(key, &iv, &buffer),
+        EncryptionType::ECB => aes_128_ecb_encrypt(key, &buffer),
+    }
+}
+
 pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, bool), SymmetricCipherError> {
-    let mut new_plaintext = generate_random_bytes((rand::random::<f32>() * 5.0) as usize + 5);
-    new_plaintext.extend(plaintext);
-    new_plaintext.extend(generate_random_bytes(
+    let key = generate_random_bytes(16);
+    let prefix = generate_random_bytes((rand::random::<f32>() * 5.0) as usize + 5);
+    let suffix = generate_random_bytes(
         (rand::random::<f32>() * 5.0) as usize + 5,
-    ));
+    );
     if rand::random() {
         Ok((
-            aes_128_ecb_encrypt(&generate_random_bytes(16), &new_plaintext)?,
+            encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, &suffix, EncryptionType::ECB)?,
             true,
         ))
     } else {
         let iv = generate_random_bytes(16);
         Ok((
-            aes_128_cbc_encrypt(&generate_random_bytes(16), &iv, &new_plaintext)?,
+            encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, &suffix, EncryptionType::CBC(iv))?,
             false,
         ))
     }
@@ -444,9 +467,7 @@ const UNKNOWN_STRING_BASE64: &str =
 
 pub fn encrypt_with_string(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
     let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
-    let mut full_plaintext = plaintext.to_vec();
-    full_plaintext.extend(unknown_string);
-    aes_128_ecb_encrypt(key, &full_plaintext)
+    encrypt_with_prefix_and_suffix(key, &vec![], plaintext, &unknown_string, EncryptionType::ECB)
 }
 
 pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
