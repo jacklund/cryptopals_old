@@ -1,5 +1,3 @@
-#![feature(iterator_repeat_with)]
-
 extern crate base64;
 extern crate crypto;
 extern crate hex;
@@ -481,7 +479,7 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, Symmetr
         let mut test_string = iter::repeat('A' as u8)
             .take(total_size - pos)
             .collect::<Vec<u8>>();
-        let mut ciphertext = encrypt_fn(&key, &test_string).unwrap();
+        let ciphertext = encrypt_fn(&key, &test_string).unwrap();
         test_string.extend(solution.clone());
         test_string.push(0u8);
         loop {
@@ -543,37 +541,37 @@ pub fn profile_for(email: &str, uid: usize, role: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use aes_128_cbc_decrypt;
-    use aes_128_cbc_encrypt;
-    use aes_128_ecb_decrypt;
-    use aes_128_ecb_encrypt;
+    use crate::aes_128_cbc_decrypt;
+    use crate::aes_128_cbc_encrypt;
+    use crate::aes_128_ecb_decrypt;
+    use crate::aes_128_ecb_encrypt;
     use base64;
-    use break_repeating_key_xor;
+    use crate::break_repeating_key_xor;
     //use brute_force_xor_key;
     use crypto::symmetriccipher::SymmetricCipherError;
-    use decrypt_ecb_byte_at_a_time;
-    use detect_aes_ecb;
-    use encrypt_decrypt_repeating_key_xor;
-    use encrypt_with_string;
-    use encryption_oracle;
-    use find_blocksize;
-    use find_repeating_xor_keysize;
-    use find_xor_key;
-    use generate_random_bytes;
-    use hamming_distance;
+    use crate::decrypt_ecb_byte_at_a_time;
+    use crate::detect_aes_ecb;
+    use crate::encrypt_decrypt_repeating_key_xor;
+    use crate::encrypt_with_string;
+    use crate::encryption_oracle;
+    use crate::find_blocksize;
+    use crate::find_repeating_xor_keysize;
+    use crate::find_xor_key;
+    use crate::generate_random_bytes;
+    use crate::hamming_distance;
     use hex;
-    use hex_to_base64;
-    use iter;
-    use parse_key_value;
-    use pkcs7_pad;
-    use profile_for;
-    use read_base64_file;
+    use crate::hex_to_base64;
+    use std::iter;
+    use crate::parse_key_value;
+    use crate::pkcs7_pad;
+    use crate::profile_for;
+    use crate::read_base64_file;
     use std;
     use std::collections::HashMap;
     use std::fs::File;
     use std::io::{BufRead, BufReader, Read};
-    use str;
-    use xor;
+    use std::str;
+    use crate::xor;
 
     // First cryptopals challenge - https://cryptopals.com/sets/1/challenges/1
     #[test]
