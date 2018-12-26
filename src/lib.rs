@@ -110,13 +110,13 @@ pub fn score_text(string_data: &[u8]) -> usize {
 }
 
 // Decrypt ciphertext using xor
-pub fn decrypt_xor(key: &u8, ciphertext: &[u8]) -> Vec<u8> {
-    ciphertext.iter().map(|c| c ^ *key).collect::<Vec<u8>>()
+pub fn decrypt_xor(key: u8, ciphertext: &[u8]) -> Vec<u8> {
+    ciphertext.iter().map(|c| c ^ key).collect::<Vec<u8>>()
 }
 
 // Decrypt using the key and return the score and decrypted value, or None if the decryption failed
-fn get_score(key: &u8, ciphertext: &[u8]) -> (usize, Vec<u8>) {
-    let string = decrypt_xor(&key, &ciphertext);
+fn get_score(key: u8, ciphertext: &[u8]) -> (usize, Vec<u8>) {
+    let string = decrypt_xor(key, &ciphertext);
     (score_text(&string), string)
 }
 
@@ -137,7 +137,7 @@ where
         (current_score, current_key, current_decrypted.to_vec()),
         |(mut score, mut key, mut decrypted), byte| {
             let test_key = key_generator(byte);
-            let (test_score, test_decrypted) = get_score(&test_key, ciphertext);
+            let (test_score, test_decrypted) = get_score(test_key, ciphertext);
             if test_score > score {
                 score = test_score;
                 key = test_key;
@@ -200,7 +200,7 @@ pub fn brute_force_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, Vec<u8>)> {
 // and then test them against a list of the most frequent characters in English
 pub fn find_xor_key(ciphertext: &[u8]) -> Option<(usize, u8, Vec<u8>)> {
     let histogram = get_character_histogram(&ciphertext);
-    let etaoin = " eEtTaAoOiInN".as_bytes();
+    let etaoin = b" eEtTaAoOiInN";
 
     try_decrypt_with_test_string(ciphertext, &histogram, etaoin)
 }
@@ -282,19 +282,18 @@ pub fn break_repeating_key_xor(ciphertext: &[u8], keysize: usize) -> Vec<u8> {
         let chunk_index = index % keysize;
         vector_of_vectors[chunk_index].push(*value);
     });
-    let key = vector_of_vectors
+    vector_of_vectors
         .iter()
         .fold(vec![] as Vec<u8>, |mut key, string| {
             let (_, k, _) = find_xor_key(&string).unwrap();
             key.push(k);
             key
-        });
-    key
+        })
 }
 
 pub fn aes_128_ecb_decrypt(
     key: &[u8],
-    mut ciphertext: &[u8],
+    ciphertext: &[u8],
 ) -> Result<Vec<u8>, SymmetricCipherError> {
     let mut decryptor = crypto::aes::ecb_decryptor(
         crypto::aes::KeySize::KeySize128,
@@ -305,7 +304,7 @@ pub fn aes_128_ecb_decrypt(
     let mut buffer = [0; 4096];
     let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
     decryptor.decrypt(
-        &mut crypto::buffer::RefReadBuffer::new(&mut ciphertext),
+        &mut crypto::buffer::RefReadBuffer::new(&ciphertext),
         &mut write_buffer,
         true,
     )?;
@@ -314,7 +313,7 @@ pub fn aes_128_ecb_decrypt(
             .take_read_buffer()
             .take_remaining()
             .iter()
-            .map(|&i| i),
+            .cloned()
     );
 
     Ok(output)
@@ -329,9 +328,9 @@ pub fn aes_128_ecb_encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Symm
     let mut output = Vec::<u8>::new();
     let mut buffer = [0; 4096];
     let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
-    let mut padded_plaintext = pkcs7_pad(&plaintext, 16);
+    let padded_plaintext = pkcs7_pad(&plaintext, 16);
     encryptor.encrypt(
-        &mut crypto::buffer::RefReadBuffer::new(&mut padded_plaintext),
+        &mut crypto::buffer::RefReadBuffer::new(&padded_plaintext),
         &mut write_buffer,
         true,
     )?;
@@ -340,7 +339,7 @@ pub fn aes_128_ecb_encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Symm
             .take_read_buffer()
             .take_remaining()
             .iter()
-            .map(|&i| i),
+            .cloned()
     );
 
     Ok(output)
@@ -358,7 +357,7 @@ pub fn detect_aes_ecb(ciphertext: &[u8]) -> bool {
             }
         }
     }
-    return false;
+    false
 }
 
 pub fn aes_128_cbc_decrypt(
@@ -404,13 +403,13 @@ pub fn aes_128_cbc_encrypt(
 pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     let mut ret = string.to_vec();
     ret.extend(
-        iter::repeat('\x04' as u8).take((blocksize - (string.len() % blocksize)) % blocksize),
+        iter::repeat(4u8).take((blocksize - (string.len() % blocksize)) % blocksize),
     );
     ret
 }
 
 pub fn generate_random_bytes(size: usize) -> Vec<u8> {
-    iter::repeat_with(|| rand::random::<u8>())
+    iter::repeat_with(rand::random::<u8>)
         .take(size)
         .collect::<Vec<u8>>()
 }
@@ -467,27 +466,47 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, Symmetr
     key: &[u8],
     encrypt_fn: F,
 ) -> Vec<u8> {
-    let total_size = encrypt_fn(&key, &vec![]).unwrap().len();
+    // Encrypt an empty string to get an idea of the total size of the message
+    let total_size = encrypt_fn(&key, &Vec::new()).unwrap().len();
+
+    // Start with an empty solution string and a test string of size 'total_size - 1'
     let mut solution = Vec::<u8>::new();
     for pos in 1usize..total_size {
-        let mut test_string = iter::repeat('A' as u8)
+        let mut test_string = iter::repeat(b'A')
             .take(total_size - pos)
             .collect::<Vec<u8>>();
+
+        // Get our base ciphertext to compare to
         let ciphertext = encrypt_fn(&key, &test_string).unwrap();
+
+        // Add our solution so far
         test_string.extend(solution.clone());
+
+        // And a zero byte
         test_string.push(0u8);
+
+        // Loop through and add 1 to the last byte until the ciphertext matches our base
+        // ciphertext (or we hit the end of our char set)
         loop {
             let test_ciphertext = encrypt_fn(&key, &test_string).unwrap();
+
+            // They match, we found another char
             if test_ciphertext[..total_size] == ciphertext[..total_size] {
+                // We've hit padding, end early
                 if test_string[total_size - 1] == 4u8 {
                     return solution; // We've hit the padding
                 }
+                // Add it to our solution string
                 solution.push(test_string[total_size - 1]);
                 break;
             }
+
+            // Abort if we ran out of characters
             if test_string[total_size - 1] as char == '~' {
                 assert!(false);
             }
+
+            // Increment the char and try again
             test_string[total_size - 1] += 1;
         }
     }
@@ -872,11 +891,23 @@ mod tests {
     //   AES-128-ECB(random-prefix || attacker-controlled || target-bytes, random-key)
     // Approach:
     //   - Encrypt empty string, keep result
-    //   - Add single digit, compare result, find block that changed
+    //   - Add single char, compare result, find block that changed
     //   - Estimate size of target bytes modulo blocksize
     //   - Generate message size that's bigger than target bytes and puts target bytes on block
     //     boundary
     //   - Repeat what we did with #12
     #[test]
-    fn test_harder_byte_at_a_time_ecb() {}
+    fn test_harder_byte_at_a_time_ecb() {
+        // Note: While this could be, in principle, usize, I restricted it to u8 to keep things
+        // from getting out of hand. Shouldn't alter how this works
+        /*
+        let prefix_size = rand::random::<u8>();
+        let prefix = generate_random_bytes(prefix_size);
+        let key = generate_random_bytes(16);
+        let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
+        fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
+            encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, unknown_string, EncryptionType::ECB)
+        }
+        */
+    }
 }
