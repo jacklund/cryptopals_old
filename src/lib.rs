@@ -211,13 +211,13 @@ pub fn encrypt_decrypt_repeating_key_xor(key: &[u8], plain_or_ciphertext: &[u8])
     let repeat = (plain_or_ciphertext.len() as f32 / key.len() as f32).ceil() as usize;
 
     // Generate the repeated key which has the same length as the text
-    let mut repeated_key = std::iter::repeat(key).take(repeat).fold(
-        Vec::<u8>::new(),
-        |mut v, b| {
-            v.append(&mut b.to_vec());
-            v
-        },
-    );
+    let mut repeated_key =
+        std::iter::repeat(key)
+            .take(repeat)
+            .fold(Vec::<u8>::new(), |mut v, b| {
+                v.append(&mut b.to_vec());
+                v
+            });
     repeated_key.truncate(plain_or_ciphertext.len());
 
     // Xor the key with the text and return the result
@@ -441,9 +441,7 @@ pub fn encrypt_with_prefix_and_suffix(
 pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, bool), SymmetricCipherError> {
     let key = generate_random_bytes(16);
     let prefix = generate_random_bytes((rand::random::<f32>() * 5.0) as usize + 5);
-    let suffix = generate_random_bytes(
-        (rand::random::<f32>() * 5.0) as usize + 5,
-    );
+    let suffix = generate_random_bytes((rand::random::<f32>() * 5.0) as usize + 5);
     if rand::random() {
         Ok((
             encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, &suffix, EncryptionType::ECB)?,
@@ -452,27 +450,23 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, bool), SymmetricC
     } else {
         let iv = generate_random_bytes(16);
         Ok((
-            encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, &suffix, EncryptionType::CBC(iv))?,
+            encrypt_with_prefix_and_suffix(
+                &key,
+                &prefix,
+                plaintext,
+                &suffix,
+                EncryptionType::CBC(iv),
+            )?,
             false,
         ))
     }
 }
 
-const UNKNOWN_STRING_BASE64: &str =
-    "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg\
-     aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq\
-     dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
-
-pub fn encrypt_with_string(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
-    let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
-    encrypt_with_prefix_and_suffix(key, &vec![], plaintext, &unknown_string, EncryptionType::ECB)
-}
-
+// Decrypt an AES ECB ciphertext one byte at a time
 pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
-    blocksize: usize,
+    key: &[u8],
     encrypt_fn: F,
 ) -> Vec<u8> {
-    let key = generate_random_bytes(blocksize);
     let total_size = encrypt_fn(&key, &vec![]).unwrap().len();
     let mut solution = Vec::<u8>::new();
     for pos in 1usize..total_size {
@@ -545,33 +539,34 @@ mod tests {
     use crate::aes_128_cbc_encrypt;
     use crate::aes_128_ecb_decrypt;
     use crate::aes_128_ecb_encrypt;
-    use base64;
     use crate::break_repeating_key_xor;
+    use base64;
     //use brute_force_xor_key;
-    use crypto::symmetriccipher::SymmetricCipherError;
     use crate::decrypt_ecb_byte_at_a_time;
     use crate::detect_aes_ecb;
     use crate::encrypt_decrypt_repeating_key_xor;
-    use crate::encrypt_with_string;
+    use crate::encrypt_with_prefix_and_suffix;
     use crate::encryption_oracle;
     use crate::find_blocksize;
     use crate::find_repeating_xor_keysize;
     use crate::find_xor_key;
     use crate::generate_random_bytes;
     use crate::hamming_distance;
-    use hex;
     use crate::hex_to_base64;
-    use std::iter;
     use crate::parse_key_value;
     use crate::pkcs7_pad;
     use crate::profile_for;
     use crate::read_base64_file;
+    use crate::xor;
+    use crate::EncryptionType;
+    use crypto::symmetriccipher::SymmetricCipherError;
+    use hex;
     use std;
     use std::collections::HashMap;
     use std::fs::File;
     use std::io::{BufRead, BufReader, Read};
+    use std::iter;
     use std::str;
-    use crate::xor;
 
     // First cryptopals challenge - https://cryptopals.com/sets/1/challenges/1
     #[test]
@@ -589,7 +584,8 @@ mod tests {
                 xor(
                     &hex::decode("1c0111001f010100061a024b53535009181c").unwrap(),
                     &hex::decode("686974207468652062756c6c277320657965").unwrap()
-                ).unwrap()
+                )
+                .unwrap()
             ),
             "746865206b696420646f6e277420706c6179"
         );
@@ -665,11 +661,9 @@ mod tests {
             .collect::<Vec<usize>>();
         let key = break_repeating_key_xor(&data, keysize_list[0]);
         let plaintext = encrypt_decrypt_repeating_key_xor(&key, &data);
-        assert!(
-            str::from_utf8(&plaintext)
-                .unwrap()
-                .starts_with("I'm back and I'm ringin' the bell")
-        );
+        assert!(str::from_utf8(&plaintext)
+            .unwrap()
+            .starts_with("I'm back and I'm ringin' the bell"));
     }
 
     // Seventh cryptopals challenge - https://cryptopals.com/sets/1/challenges/7
@@ -677,11 +671,9 @@ mod tests {
     fn test_decrypt_aes_128_ecb() {
         let mut data = read_base64_file("data/7.txt");
         let output = aes_128_ecb_decrypt("YELLOW SUBMARINE".as_bytes(), &mut data).unwrap();
-        assert!(
-            str::from_utf8(&output)
-                .unwrap()
-                .starts_with("I'm back and I'm ringin' the bell")
-        );
+        assert!(str::from_utf8(&output)
+            .unwrap()
+            .starts_with("I'm back and I'm ringin' the bell"));
     }
 
     // Eighth cryptopals challenge - https://cryptopals.com/sets/1/challenges/8
@@ -696,11 +688,9 @@ mod tests {
                 break;
             }
         }
-        assert!(
-            found
-                .unwrap()
-                .starts_with("d880619740a8a19b7840a8a31c810a3d08649")
-        );
+        assert!(found
+            .unwrap()
+            .starts_with("d880619740a8a19b7840a8a31c810a3d08649"));
     }
 
     // Ninth cryptopals challenge - https://cryptopals.com/sets/2/challenges/9
@@ -731,11 +721,9 @@ mod tests {
         let ciphertext = read_base64_file("data/10.txt");
         let iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
         let plaintext = aes_128_cbc_decrypt(&key, &iv, &ciphertext).unwrap();
-        assert!(
-            str::from_utf8(&plaintext)
-                .unwrap()
-                .starts_with("I'm back and I'm ringin' the bell")
-        );
+        assert!(str::from_utf8(&plaintext)
+            .unwrap()
+            .starts_with("I'm back and I'm ringin' the bell"));
     }
 
     #[test]
@@ -764,24 +752,43 @@ mod tests {
         }
     }
 
+    const UNKNOWN_STRING_BASE64: &str =
+        "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg\
+         aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq\
+         dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
+
     // Twelfth cryptopals challenge - https://cryptopals.com/sets/2/challenges/12
     #[test]
     fn test_byte_at_a_time_ecb_decryption() {
+        fn encrypt_with_string(
+            key: &[u8],
+            plaintext: &[u8],
+        ) -> Result<Vec<u8>, SymmetricCipherError> {
+            let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
+            encrypt_with_prefix_and_suffix(
+                key,
+                &vec![],
+                plaintext,
+                &unknown_string,
+                EncryptionType::ECB,
+            )
+        }
+        let blocksize = find_blocksize(encrypt_with_string).unwrap();
+        let key = generate_random_bytes(blocksize);
+        assert_eq!(16, blocksize);
+        let ciphertext = encrypt_with_string(
+            &key,
+            &iter::repeat(0u8).take(2 * blocksize).collect::<Vec<u8>>(),
+        )
+        .unwrap();
+        assert!(detect_aes_ecb(&ciphertext));
         let solution_string = "Rollin' in my 5.0\n\
                                With my rag-top down so my hair can blow\n\
                                The girlies on standby waving just to say hi\n\
                                Did you stop? No, I just drove by\n";
-        let blocksize = find_blocksize(encrypt_with_string).unwrap();
-        assert_eq!(16, blocksize);
-        let key = generate_random_bytes(16);
-        let ciphertext = encrypt_with_string(
-            &key,
-            &iter::repeat(0u8).take(2 * blocksize).collect::<Vec<u8>>(),
-        ).unwrap();
-        assert!(detect_aes_ecb(&ciphertext));
         assert_eq!(
             solution_string,
-            str::from_utf8(&decrypt_ecb_byte_at_a_time(blocksize, encrypt_with_string)).unwrap()
+            str::from_utf8(&decrypt_ecb_byte_at_a_time(&key, encrypt_with_string)).unwrap()
         );
     }
 
@@ -829,17 +836,21 @@ mod tests {
         let blocksize = find_blocksize(encrypt_user_profile).unwrap();
         assert_eq!(16, blocksize);
 
-        // Want an email address that runs through the first block, with only 'admin', followed
-        // by padding, in the second
+        // Create an "email address" long enough to fill up the first block so that we can add 'admin'
+        // and padding in the next
         let mut test_email = iter::repeat('A' as u8)
             .take(blocksize - 6)
             .collect::<Vec<u8>>();
         assert_eq!(10, test_email.len()); // + "email=" makes 16 bytes
         test_email.extend("admin".as_bytes());
         test_email.extend(iter::repeat(4u8).take(11).collect::<Vec<u8>>()); // Pad rest of second block
+
         assert_eq!(26, test_email.len());
+
+        // Try encrypting that email address
         let encrypted = encrypt_user_profile(&key, &test_email).unwrap();
-        // Now take the second block
+
+        // Now take the second block. We'll substitute that block in later
         let admin_block = &encrypted[16..32];
 
         // Next we want an email long enough to end the block with "role="
@@ -855,4 +866,17 @@ mod tests {
 
         assert_eq!("admin", profile["role"]);
     }
+
+    // Fourteenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/14
+    // Output looks like:
+    //   AES-128-ECB(random-prefix || attacker-controlled || target-bytes, random-key)
+    // Approach:
+    //   - Encrypt empty string, keep result
+    //   - Add single digit, compare result, find block that changed
+    //   - Estimate size of target bytes modulo blocksize
+    //   - Generate message size that's bigger than target bytes and puts target bytes on block
+    //     boundary
+    //   - Repeat what we did with #12
+    #[test]
+    fn test_harder_byte_at_a_time_ecb() {}
 }
