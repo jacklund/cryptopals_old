@@ -291,10 +291,7 @@ pub fn break_repeating_key_xor(ciphertext: &[u8], keysize: usize) -> Vec<u8> {
         })
 }
 
-pub fn aes_128_ecb_decrypt(
-    key: &[u8],
-    ciphertext: &[u8],
-) -> Result<Vec<u8>, SymmetricCipherError> {
+pub fn aes_128_ecb_decrypt(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
     let mut decryptor = crypto::aes::ecb_decryptor(
         crypto::aes::KeySize::KeySize128,
         key,
@@ -313,7 +310,7 @@ pub fn aes_128_ecb_decrypt(
             .take_read_buffer()
             .take_remaining()
             .iter()
-            .cloned()
+            .cloned(),
     );
 
     Ok(output)
@@ -339,7 +336,7 @@ pub fn aes_128_ecb_encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Symm
             .take_read_buffer()
             .take_remaining()
             .iter()
-            .cloned()
+            .cloned(),
     );
 
     Ok(output)
@@ -402,9 +399,7 @@ pub fn aes_128_cbc_encrypt(
 
 pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     let mut ret = string.to_vec();
-    ret.extend(
-        iter::repeat(4u8).take((blocksize - (string.len() % blocksize)) % blocksize),
-    );
+    ret.extend(iter::repeat(4u8).take((blocksize - (string.len() % blocksize)) % blocksize));
     ret
 }
 
@@ -462,12 +457,11 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, bool), SymmetricC
 }
 
 // Decrypt an AES ECB ciphertext one byte at a time
-pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
-    key: &[u8],
+pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
     encrypt_fn: F,
 ) -> Vec<u8> {
     // Encrypt an empty string to get an idea of the total size of the message
-    let total_size = encrypt_fn(&key, &Vec::new()).unwrap().len();
+    let total_size = encrypt_fn(&Vec::new()).unwrap().len();
 
     // Start with an empty solution string and a test string of size 'total_size - 1'
     let mut solution = Vec::<u8>::new();
@@ -477,7 +471,7 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, Symmetr
             .collect::<Vec<u8>>();
 
         // Get our base ciphertext to compare to
-        let ciphertext = encrypt_fn(&key, &test_string).unwrap();
+        let ciphertext = encrypt_fn(&test_string).unwrap();
 
         // Add our solution so far
         test_string.extend(solution.clone());
@@ -488,7 +482,7 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, Symmetr
         // Loop through and add 1 to the last byte until the ciphertext matches our base
         // ciphertext (or we hit the end of our char set)
         loop {
-            let test_ciphertext = encrypt_fn(&key, &test_string).unwrap();
+            let test_ciphertext = encrypt_fn(&test_string).unwrap();
 
             // They match, we found another char
             if test_ciphertext[..total_size] == ciphertext[..total_size] {
@@ -514,16 +508,15 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, Symmetr
     solution
 }
 
-pub fn find_blocksize<F: Fn(&[u8], &[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
-    encrypt_fn: F,
+pub fn find_blocksize<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
+    encrypt_fn: &F,
 ) -> Option<usize> {
-    let key = generate_random_bytes(16);
     let mut plaintext = Vec::<u8>::new();
-    let initial = encrypt_fn(&key, &plaintext).unwrap().len();
+    let initial = encrypt_fn(&plaintext).unwrap().len();
     let mut ciphertext;
     for _ in 0..2048 {
         plaintext.push(0u8);
-        ciphertext = encrypt_fn(&key, &plaintext).unwrap();
+        ciphertext = encrypt_fn(&plaintext).unwrap();
         if ciphertext.len() != initial {
             return Some(ciphertext.len() - initial);
         }
@@ -552,6 +545,53 @@ pub fn profile_for(email: &str, uid: usize, role: &str) -> String {
         .join("&")
 }
 
+pub fn map_blocks(ciphertext: &[u8], blocksize: usize) -> Vec<Vec<u8>> {
+    ciphertext
+        .iter()
+        .chunks(blocksize)
+        .into_iter()
+        .map(|c| c.cloned().collect::<Vec<u8>>())
+        .collect::<Vec<Vec<u8>>>()
+}
+
+pub fn find_prefix_length<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
+    encrypt_fn: &F,
+) -> Option<usize> {
+    let blocksize = find_blocksize(encrypt_fn).unwrap();
+
+    let mut test_string: Vec<u8> = iter::repeat(b'A').take(blocksize * 2).collect::<Vec<u8>>();
+    for padding in 0..blocksize {
+        let ciphertext = encrypt_fn(&test_string).unwrap();
+        let blocks = map_blocks(&ciphertext, blocksize);
+        for i in 0..blocks.len() - 1 {
+            if blocks[i] == blocks[i + 1] {
+                return Some(blocksize * i - padding);
+            }
+        }
+        test_string.push(b'A');
+    }
+
+    None
+}
+
+pub fn find_suffix_length<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
+    encrypt_fn: &F,
+) -> usize {
+    let prefix_length = find_prefix_length(&encrypt_fn).unwrap();
+
+    let mut test_string = vec![];
+    let empty_ciphertext = encrypt_fn(&test_string).unwrap();
+    let empty_ciphertext_len = empty_ciphertext.len();
+    test_string.push(b'A');
+    let mut ciphertext = encrypt_fn(&test_string).unwrap();
+    while ciphertext.len() == empty_ciphertext_len {
+        test_string.push(b'A');
+        ciphertext = encrypt_fn(&test_string).unwrap();
+    }
+
+    empty_ciphertext_len - prefix_length - test_string.len() + 1
+}
+
 #[cfg(test)]
 mod tests {
     use crate::aes_128_cbc_decrypt;
@@ -567,7 +607,9 @@ mod tests {
     use crate::encrypt_with_prefix_and_suffix;
     use crate::encryption_oracle;
     use crate::find_blocksize;
+    use crate::find_prefix_length;
     use crate::find_repeating_xor_keysize;
+    use crate::find_suffix_length;
     use crate::find_xor_key;
     use crate::generate_random_bytes;
     use crate::hamming_distance;
@@ -779,27 +821,25 @@ mod tests {
     // Twelfth cryptopals challenge - https://cryptopals.com/sets/2/challenges/12
     #[test]
     fn test_byte_at_a_time_ecb_decryption() {
-        fn encrypt_with_string(
-            key: &[u8],
-            plaintext: &[u8],
-        ) -> Result<Vec<u8>, SymmetricCipherError> {
+        // Black Box
+        let key = generate_random_bytes(16);
+        let encrypt_with_string = |plaintext: &[u8]| {
             let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
             encrypt_with_prefix_and_suffix(
-                key,
+                &key,
                 &vec![],
                 plaintext,
                 &unknown_string,
                 EncryptionType::ECB,
             )
-        }
-        let blocksize = find_blocksize(encrypt_with_string).unwrap();
-        let key = generate_random_bytes(blocksize);
+        };
+
+        // Test
+        let blocksize = find_blocksize(&encrypt_with_string).unwrap();
         assert_eq!(16, blocksize);
-        let ciphertext = encrypt_with_string(
-            &key,
-            &iter::repeat(0u8).take(2 * blocksize).collect::<Vec<u8>>(),
-        )
-        .unwrap();
+        let ciphertext =
+            encrypt_with_string(&iter::repeat(0u8).take(2 * blocksize).collect::<Vec<u8>>())
+                .unwrap();
         assert!(detect_aes_ecb(&ciphertext));
         let solution_string = "Rollin' in my 5.0\n\
                                With my rag-top down so my hair can blow\n\
@@ -807,7 +847,7 @@ mod tests {
                                Did you stop? No, I just drove by\n";
         assert_eq!(
             solution_string,
-            str::from_utf8(&decrypt_ecb_byte_at_a_time(&key, encrypt_with_string)).unwrap()
+            str::from_utf8(&decrypt_ecb_byte_at_a_time(encrypt_with_string)).unwrap()
         );
     }
 
@@ -835,11 +875,14 @@ mod tests {
     // Thirteenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/13
     #[test]
     fn test_ecb_cut_and_paste() {
+        // Black Box
         let key = generate_random_bytes(16);
-        fn encrypt_user_profile(key: &[u8], email: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
+        let encrypt_user_profile = |email: &[u8]| {
             let profile = profile_for(str::from_utf8(email).unwrap(), 10, "user");
-            aes_128_ecb_encrypt(key, profile.as_bytes())
-        }
+            aes_128_ecb_encrypt(&key, profile.as_bytes())
+        };
+
+        // Test
         fn decrypt_user_profile(
             key: &[u8],
             ciphertext: &[u8],
@@ -852,7 +895,7 @@ mod tests {
             decrypted.push(last);
             Ok(parse_key_value(str::from_utf8(&decrypted).unwrap()))
         }
-        let blocksize = find_blocksize(encrypt_user_profile).unwrap();
+        let blocksize = find_blocksize(&encrypt_user_profile).unwrap();
         assert_eq!(16, blocksize);
 
         // Create an "email address" long enough to fill up the first block so that we can add 'admin'
@@ -867,7 +910,7 @@ mod tests {
         assert_eq!(26, test_email.len());
 
         // Try encrypting that email address
-        let encrypted = encrypt_user_profile(&key, &test_email).unwrap();
+        let encrypted = encrypt_user_profile(&test_email).unwrap();
 
         // Now take the second block. We'll substitute that block in later
         let admin_block = &encrypted[16..32];
@@ -875,7 +918,7 @@ mod tests {
         // Next we want an email long enough to end the block with "role="
         // so that's 32 - 19, so 13 bytes
         test_email = iter::repeat('A' as u8).take(13).collect::<Vec<u8>>();
-        let encrypted_again = encrypt_user_profile(&key, &test_email).unwrap();
+        let encrypted_again = encrypt_user_profile(&test_email).unwrap();
 
         // We replace the third block with our admin block
         let mut new_encrypted = encrypted_again[..32].to_vec();
@@ -884,6 +927,39 @@ mod tests {
         let profile = decrypt_user_profile(&key, &new_encrypted).unwrap();
 
         assert_eq!("admin", profile["role"]);
+    }
+
+    #[test]
+    fn test_find_prefix_length() {
+        let prefix_size = rand::random::<u8>() as usize;
+        let prefix = generate_random_bytes(prefix_size);
+        let key = generate_random_bytes(16);
+        let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
+        let encrypt = |plaintext: &[u8]| {
+            encrypt_with_prefix_and_suffix(
+                &key,
+                &prefix,
+                plaintext,
+                &unknown_string,
+                EncryptionType::ECB,
+            )
+        };
+        let found_size = find_prefix_length(&encrypt);
+        assert_eq!(prefix_size, found_size.unwrap());
+    }
+
+    #[test]
+    fn test_find_suffix_length() {
+        let prefix_size = rand::random::<u8>() as usize;
+        let prefix = generate_random_bytes(prefix_size);
+        let key = generate_random_bytes(16);
+        let suffix_size = rand::random::<u8>() as usize;
+        let suffix = generate_random_bytes(prefix_size);
+        let encrypt = |plaintext: &[u8]| {
+            encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, &suffix, EncryptionType::ECB)
+        };
+        let found_size = find_suffix_length(&encrypt);
+        assert_eq!(suffix_size, found_size);
     }
 
     // Fourteenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/14
@@ -896,18 +972,30 @@ mod tests {
     //   - Generate message size that's bigger than target bytes and puts target bytes on block
     //     boundary
     //   - Repeat what we did with #12
+    /*
     #[test]
     fn test_harder_byte_at_a_time_ecb() {
-        // Note: While this could be, in principle, usize, I restricted it to u8 to keep things
-        // from getting out of hand. Shouldn't alter how this works
-        /*
-        let prefix_size = rand::random::<u8>();
+        let prefix_size = rand::random::<u8>() as usize;
         let prefix = generate_random_bytes(prefix_size);
         let key = generate_random_bytes(16);
         let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
-        fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
-            encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, unknown_string, EncryptionType::ECB)
-        }
-        */
+        let encrypt = |key: &[u8], plaintext: &[u8]| {
+            encrypt_with_prefix_and_suffix(
+                key,
+                &prefix,
+                plaintext,
+                &unknown_string,
+                EncryptionType::ECB,
+            )
+        };
+        let solution_string = "Rollin' in my 5.0\n\
+                               With my rag-top down so my hair can blow\n\
+                               The girlies on standby waving just to say hi\n\
+                               Did you stop? No, I just drove by\n";
+        assert_eq!(
+            solution_string,
+            str::from_utf8(&decrypt_ecb_byte_at_a_time(&key, encrypt)).unwrap()
+        );
     }
+    */
 }
