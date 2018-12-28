@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::exception::CryptoError;
 use std::collections::HashMap;
 use std::error::Error;
 #[cfg(test)]
@@ -112,6 +114,28 @@ pub fn parse_key_value(string: &str) -> HashMap<String, String> {
     }
 
     ret
+}
+
+#[cfg(test)]
+const PKCS7_PAD_CHARACTER: u8 = 4u8;
+
+#[cfg(test)]
+pub fn validate_pkcs7_padding(string: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    let mut result = string.to_vec();
+    let mut ch: Option<u8> = result.pop();
+    while ch.is_some() {
+        match ch.unwrap() {
+            PKCS7_PAD_CHARACTER => {}
+            b' '...b'~' => {
+                result.push(ch.unwrap());
+                break;
+            }
+            _ => return Err(CryptoError::BadPadding),
+        }
+        ch = result.pop();
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
