@@ -350,14 +350,17 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, bool), SymmetricC
 pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
     encrypt_fn: F,
 ) -> Vec<u8> {
-    // Encrypt an empty string to get an idea of the total size of the message
-    let total_size = encrypt_fn(&Vec::new()).unwrap().len();
+    let blocksize = find_blocksize(&encrypt_fn).unwrap();
+    let (prefix_size, target_size) = find_prefix_suffix_lengths(&encrypt_fn);
+
+    let padding_size = (blocksize - (prefix_size + target_size) % blocksize) % blocksize;
+    let test_string_size = target_size + padding_size;
 
     // Start with an empty solution string and a test string of size 'total_size - 1'
     let mut solution = Vec::<u8>::new();
-    for pos in 1usize..total_size {
+    for pos in 1usize..test_string_size {
         let mut test_string = iter::repeat(b'A')
-            .take(total_size - pos)
+            .take(test_string_size - pos)
             .collect::<Vec<u8>>();
 
         // Get our base ciphertext to compare to
@@ -375,23 +378,25 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
             let test_ciphertext = encrypt_fn(&test_string).unwrap();
 
             // They match, we found another char
-            if test_ciphertext[..total_size] == ciphertext[..total_size] {
+            if test_ciphertext[..prefix_size + test_string_size]
+                == ciphertext[..prefix_size + test_string_size]
+            {
                 // We've hit padding, end early
-                if test_string[total_size - 1] == 4u8 {
+                if test_string[test_string_size - 1] == 4u8 {
                     return solution; // We've hit the padding
                 }
                 // Add it to our solution string
-                solution.push(test_string[total_size - 1]);
+                solution.push(test_string[test_string_size - 1]);
                 break;
             }
 
             // Abort if we ran out of characters
-            if test_string[total_size - 1] as char == '~' {
+            if test_string[test_string_size - 1] as char == '~' {
                 assert!(false);
             }
 
             // Increment the char and try again
-            test_string[total_size - 1] += 1;
+            test_string[test_string_size - 1] += 1;
         }
     }
 
@@ -454,16 +459,14 @@ pub fn find_prefix_length<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>
     None
 }
 
-pub fn find_suffix_length<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
+pub fn find_prefix_suffix_lengths<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
     encrypt_fn: &F,
-) -> usize {
+) -> (usize, usize) {
     let prefix_length = find_prefix_length(&encrypt_fn).unwrap();
-    println!("prefix length is {}", prefix_length);
 
     let mut test_string = vec![];
     let empty_ciphertext = encrypt_fn(&test_string).unwrap();
     let empty_ciphertext_len = empty_ciphertext.len();
-    println!("empty ciphertext length is {}", empty_ciphertext_len);
     test_string.push(b'A');
     let mut ciphertext = encrypt_fn(&test_string).unwrap();
     while ciphertext.len() == empty_ciphertext_len {
@@ -471,9 +474,11 @@ pub fn find_suffix_length<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>
         ciphertext = encrypt_fn(&test_string).unwrap();
     }
     test_string.pop();
-    println!("test string length is {}", test_string.len());
 
-    empty_ciphertext_len - prefix_length - test_string.len()
+    (
+        prefix_length,
+        empty_ciphertext_len - prefix_length - test_string.len(),
+    )
 }
 
 #[cfg(test)]
@@ -492,8 +497,8 @@ mod tests {
     use crate::encryption_oracle;
     use crate::find_blocksize;
     use crate::find_prefix_length;
+    use crate::find_prefix_suffix_lengths;
     use crate::find_repeating_xor_keysize;
-    use crate::find_suffix_length;
     use crate::find_xor_key;
     use crate::generate_random_bytes;
     use crate::pkcs7_pad;
@@ -815,11 +820,11 @@ mod tests {
         let prefix = generate_random_bytes(prefix_size);
         let key = generate_random_bytes(16);
         let suffix_size = rand::random::<u8>() as usize;
-        let suffix = generate_random_bytes(prefix_size);
+        let suffix = generate_random_bytes(suffix_size);
         let encrypt = |plaintext: &[u8]| {
             encrypt_with_prefix_and_suffix(&key, &prefix, plaintext, &suffix, EncryptionType::ECB)
         };
-        let found_size = find_suffix_length(&encrypt);
+        let (_, found_size) = find_prefix_suffix_lengths(&encrypt);
         assert_eq!(suffix_size, found_size);
     }
 
@@ -827,36 +832,35 @@ mod tests {
     // Output looks like:
     //   AES-128-ECB(random-prefix || attacker-controlled || target-bytes, random-key)
     // Approach:
-    //   - Encrypt empty string, keep result
-    //   - Add single char, compare result, find block that changed
-    //   - Estimate size of target bytes modulo blocksize
+    //   - Find prefix and target sizes
     //   - Generate message size that's bigger than target bytes and puts target bytes on block
     //     boundary
     //   - Repeat what we did with #12
-    /*
     #[test]
     fn test_harder_byte_at_a_time_ecb() {
+        // Black Box
         let prefix_size = rand::random::<u8>() as usize;
         let prefix = generate_random_bytes(prefix_size);
         let key = generate_random_bytes(16);
         let unknown_string = base64::decode(UNKNOWN_STRING_BASE64).unwrap();
-        let encrypt = |key: &[u8], plaintext: &[u8]| {
+        let encrypt = |plaintext: &[u8]| {
             encrypt_with_prefix_and_suffix(
-                key,
+                &key,
                 &prefix,
                 plaintext,
                 &unknown_string,
                 EncryptionType::ECB,
             )
         };
+
+        // Solution
         let solution_string = "Rollin' in my 5.0\n\
                                With my rag-top down so my hair can blow\n\
                                The girlies on standby waving just to say hi\n\
                                Did you stop? No, I just drove by\n";
         assert_eq!(
             solution_string,
-            str::from_utf8(&decrypt_ecb_byte_at_a_time(&key, encrypt)).unwrap()
+            str::from_utf8(&decrypt_ecb_byte_at_a_time(encrypt)).unwrap()
         );
     }
-    */
 }
