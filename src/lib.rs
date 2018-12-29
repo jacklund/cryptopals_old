@@ -3,6 +3,8 @@ extern crate crypto;
 extern crate hex;
 extern crate is_sorted;
 extern crate itertools;
+#[macro_use]
+extern crate percent_encoding;
 extern crate rand;
 
 mod challenges;
@@ -285,7 +287,6 @@ pub fn aes_128_cbc_encrypt(
     iv: &[u8],
     plaintext: &[u8],
 ) -> Result<Vec<u8>, SymmetricCipherError> {
-    println!("plaintext len = {}", plaintext.len());
     let chunks = pkcs7_pad(&plaintext, iv.len())
         .chunks(16)
         .map(|c| c.to_vec())
@@ -506,7 +507,6 @@ mod tests {
         let key = "YELLOW SUBMARINE".as_bytes();
         let plaintext = "Hello World Jack";
         let ciphertext = aes_128_ecb_encrypt(&key, &plaintext.as_bytes()).unwrap();
-        println!("{}, {:?}", ciphertext.len(), ciphertext);
         assert_eq!(
             plaintext,
             str::from_utf8(&aes_128_ecb_decrypt(&key, &ciphertext).unwrap()).unwrap()
