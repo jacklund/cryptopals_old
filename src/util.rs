@@ -95,7 +95,8 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> usize {
 
 pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     let mut ret = string.to_vec();
-    ret.extend(iter::repeat(4u8).take((blocksize - (string.len() % blocksize)) % blocksize));
+    let padding_size = (blocksize - (string.len() % blocksize)) % blocksize;
+    ret.extend(iter::repeat(padding_size as u8).take(padding_size));
     ret
 }
 
@@ -117,22 +118,21 @@ pub fn parse_key_value(string: &str) -> HashMap<String, String> {
 }
 
 #[cfg(test)]
-const PKCS7_PAD_CHARACTER: u8 = 4u8;
-
-#[cfg(test)]
 pub fn validate_pkcs7_padding(string: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let mut result = string.to_vec();
-    let mut ch: Option<u8> = result.pop();
-    while ch.is_some() {
-        match ch.unwrap() {
-            PKCS7_PAD_CHARACTER => {}
-            b' '...b'~' => {
-                result.push(ch.unwrap());
-                break;
+    let maybe_pad_byte: Option<u8> = result.pop();
+    if maybe_pad_byte.is_some() {
+        let pad_byte = maybe_pad_byte.unwrap();
+        for _ in 0..pad_byte - 1 {
+            match result.pop() {
+                None => return Err(CryptoError::BadPadding),
+                Some(byte) => {
+                    if byte != pad_byte {
+                        return Err(CryptoError::BadPadding);
+                    }
+                }
             }
-            _ => return Err(CryptoError::BadPadding),
         }
-        ch = result.pop();
     }
 
     Ok(result)

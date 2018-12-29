@@ -356,12 +356,19 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
     let blocksize = find_blocksize(&encrypt_fn).unwrap();
     let (prefix_size, target_size) = find_prefix_suffix_lengths(&encrypt_fn);
 
+    // Number of bytes to add so that our target starts on a block boundary
     let padding_size = (blocksize - (prefix_size + target_size) % blocksize) % blocksize;
+
+    // Our test string will be big enough to contain the target, plus whatever padding to
+    // ensure the target starts on the block boundary
     let test_string_size = target_size + padding_size;
 
-    // Start with an empty solution string and a test string of size 'total_size - 1'
+    // Start with an empty solution string and our test string
     let mut solution = Vec::<u8>::new();
+
     for pos in 1usize..test_string_size {
+        // We start with our test string such that one character of the target is just this side
+        // of the block boundary
         let mut test_string = iter::repeat(b'A')
             .take(test_string_size - pos)
             .collect::<Vec<u8>>();
@@ -372,7 +379,8 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
         // Add our solution so far
         test_string.extend(solution.clone());
 
-        // And a zero byte
+        // We start with a zero byte, and increment it until our
+        // ciphertexts match in that block
         test_string.push(0u8);
 
         // Loop through and add 1 to the last byte until the ciphertext matches our base
@@ -385,7 +393,9 @@ pub fn decrypt_ecb_byte_at_a_time<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
                 == ciphertext[..prefix_size + test_string_size]
             {
                 // We've hit padding, end early
-                if test_string[test_string_size - 1] == 4u8 {
+                // Padding will always be 0x01 because we'll be
+                // one byte away from the block boundary
+                if test_string[test_string_size - 1] == 1u8 {
                     return solution; // We've hit the padding
                 }
                 // Add it to our solution string
