@@ -16,6 +16,7 @@ use crate::util::get_character_histogram;
 use crate::util::hamming_distance;
 use crate::util::pkcs7_pad;
 use crate::util::score_text;
+use crate::util::validate_pkcs7_padding;
 use crate::util::xor;
 
 use crypto::buffer::ReadBuffer;
@@ -197,12 +198,24 @@ pub fn break_repeating_key_xor(ciphertext: &[u8], keysize: usize) -> Vec<u8> {
         })
 }
 
-pub fn aes_128_ecb_decrypt(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
-    let mut decryptor = crypto::aes::ecb_decryptor(
-        crypto::aes::KeySize::KeySize128,
-        key,
-        crypto::blockmodes::NoPadding,
-    );
+pub fn aes_128_ecb_decrypt(
+    key: &[u8],
+    ciphertext: &[u8],
+    padding: bool,
+) -> Result<Vec<u8>, SymmetricCipherError> {
+    let mut decryptor = if padding {
+        crypto::aes::ecb_decryptor(
+            crypto::aes::KeySize::KeySize128,
+            key,
+            crypto::blockmodes::PkcsPadding,
+        )
+    } else {
+        crypto::aes::ecb_decryptor(
+            crypto::aes::KeySize::KeySize128,
+            key,
+            crypto::blockmodes::NoPadding,
+        )
+    };
     let mut output = Vec::<u8>::new();
     let mut buffer = [0; 4096];
     let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
@@ -222,18 +235,29 @@ pub fn aes_128_ecb_decrypt(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Sym
     Ok(output)
 }
 
-pub fn aes_128_ecb_encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
-    let mut encryptor = crypto::aes::ecb_encryptor(
-        crypto::aes::KeySize::KeySize128,
-        key,
-        crypto::blockmodes::NoPadding,
-    );
+pub fn aes_128_ecb_encrypt(
+    key: &[u8],
+    plaintext: &[u8],
+    padding: bool,
+) -> Result<Vec<u8>, SymmetricCipherError> {
+    let mut encryptor = if padding {
+        crypto::aes::ecb_encryptor(
+            crypto::aes::KeySize::KeySize128,
+            key,
+            crypto::blockmodes::PkcsPadding,
+        )
+    } else {
+        crypto::aes::ecb_encryptor(
+            crypto::aes::KeySize::KeySize128,
+            key,
+            crypto::blockmodes::NoPadding,
+        )
+    };
     let mut output = Vec::<u8>::new();
     let mut buffer = [0; 4096];
     let mut write_buffer = crypto::buffer::RefWriteBuffer::new(&mut buffer);
-    let padded_plaintext = pkcs7_pad(&plaintext, 16);
     encryptor.encrypt(
-        &mut crypto::buffer::RefReadBuffer::new(&padded_plaintext),
+        &mut crypto::buffer::RefReadBuffer::new(&plaintext),
         &mut write_buffer,
         true,
     )?;
@@ -275,11 +299,11 @@ pub fn aes_128_cbc_decrypt(
     let mut plaintext = Vec::<u8>::new();
     let mut vector = iv.to_vec();
     for chunk in chunks {
-        plaintext.extend(xor(&aes_128_ecb_decrypt(&key, &chunk).unwrap(), &vector).unwrap());
+        plaintext.extend(xor(&aes_128_ecb_decrypt(&key, &chunk, false)?, &vector).unwrap());
         vector = chunk;
     }
 
-    Ok(plaintext)
+    Ok(validate_pkcs7_padding(&plaintext).unwrap())
 }
 
 pub fn aes_128_cbc_encrypt(
@@ -288,13 +312,13 @@ pub fn aes_128_cbc_encrypt(
     plaintext: &[u8],
 ) -> Result<Vec<u8>, SymmetricCipherError> {
     let chunks = pkcs7_pad(&plaintext, iv.len())
-        .chunks(16)
+        .chunks(iv.len())
         .map(|c| c.to_vec())
         .collect::<Vec<Vec<u8>>>();
     let mut ciphertext = Vec::<u8>::new();
     let mut vector = iv.to_vec();
     for chunk in chunks {
-        let cipher_chunk = aes_128_ecb_encrypt(&key, &xor(&chunk, &vector).unwrap())?;
+        let cipher_chunk = aes_128_ecb_encrypt(&key, &xor(&chunk, &vector).unwrap(), false)?;
         ciphertext.extend(cipher_chunk.clone());
         vector = cipher_chunk;
     }
@@ -321,7 +345,7 @@ pub fn encrypt_with_prefix_and_suffix(
 
     match encryption_type {
         EncryptionType::CBC(iv) => aes_128_cbc_encrypt(key, &iv, &buffer),
-        EncryptionType::ECB => aes_128_ecb_encrypt(key, &buffer),
+        EncryptionType::ECB => aes_128_ecb_encrypt(key, &buffer, true),
     }
 }
 
@@ -486,7 +510,6 @@ pub fn find_prefix_suffix_lengths<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
         test_string.push(b'A');
         ciphertext = encrypt_fn(&test_string).unwrap();
     }
-    test_string.pop();
 
     (
         prefix_length,
@@ -516,11 +539,9 @@ mod tests {
     fn test_ecb_encrypt() {
         let key = "YELLOW SUBMARINE".as_bytes();
         let plaintext = "Hello World Jack";
-        let ciphertext = aes_128_ecb_encrypt(&key, &plaintext.as_bytes()).unwrap();
-        assert_eq!(
-            plaintext,
-            str::from_utf8(&aes_128_ecb_decrypt(&key, &ciphertext).unwrap()).unwrap()
-        );
+        let ciphertext = aes_128_ecb_encrypt(&key, &plaintext.as_bytes(), true).unwrap();
+        let decrypted = aes_128_ecb_decrypt(&key, &ciphertext, true).unwrap();
+        assert_eq!(plaintext, str::from_utf8(&decrypted).unwrap());
     }
 
     #[test]
@@ -529,10 +550,8 @@ mod tests {
         let plaintext = "Hello World Jack";
         let iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
         let ciphertext = aes_128_cbc_encrypt(&key, &iv, &plaintext.as_bytes()).unwrap();
-        assert_eq!(
-            plaintext,
-            str::from_utf8(&aes_128_cbc_decrypt(&key, &iv, &ciphertext).unwrap()).unwrap()
-        );
+        let decrypted = aes_128_cbc_decrypt(&key, &iv, &ciphertext).unwrap();
+        assert_eq!(plaintext, str::from_utf8(&decrypted).unwrap());
     }
     #[test]
     fn test_key_value_encode() {

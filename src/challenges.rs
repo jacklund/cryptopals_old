@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn test_decrypt_aes_128_ecb() {
         let mut data = read_base64_file("data/7.txt");
-        let output = aes_128_ecb_decrypt("YELLOW SUBMARINE".as_bytes(), &mut data).unwrap();
+        let output = aes_128_ecb_decrypt("YELLOW SUBMARINE".as_bytes(), &mut data, true).unwrap();
         assert!(str::from_utf8(&output)
             .unwrap()
             .starts_with("I'm back and I'm ringin' the bell"));
@@ -227,7 +227,7 @@ mod tests {
         let key = generate_random_bytes(16);
         let encrypt_user_profile = |email: &[u8]| {
             let profile = profile_for(str::from_utf8(email).unwrap(), 10, "user");
-            aes_128_ecb_encrypt(&key, profile.as_bytes())
+            aes_128_ecb_encrypt(&key, profile.as_bytes(), true)
         };
 
         // Test
@@ -235,7 +235,7 @@ mod tests {
             key: &[u8],
             ciphertext: &[u8],
         ) -> Result<HashMap<String, String>, SymmetricCipherError> {
-            let mut decrypted: Vec<u8> = aes_128_ecb_decrypt(key, ciphertext)?;
+            let mut decrypted: Vec<u8> = aes_128_ecb_decrypt(key, ciphertext, true)?;
             let mut last = decrypted.pop().unwrap();
             while last == 4u8 {
                 last = decrypted.pop().unwrap();

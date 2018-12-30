@@ -1,4 +1,3 @@
-#[cfg(test)]
 use crate::exception::CryptoError;
 use std::collections::HashMap;
 use std::error::Error;
@@ -95,7 +94,7 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> usize {
 
 pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     let mut ret = string.to_vec();
-    let padding_size = (blocksize - (string.len() % blocksize)) % blocksize;
+    let padding_size = blocksize - (string.len() % blocksize);
     ret.extend(iter::repeat(padding_size as u8).take(padding_size));
     ret
 }
@@ -117,7 +116,6 @@ pub fn parse_key_value(string: &str) -> HashMap<String, String> {
     ret
 }
 
-#[cfg(test)]
 pub fn validate_pkcs7_padding(string: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let mut result = string.to_vec();
     let maybe_pad_byte: Option<u8> = result.pop();
@@ -142,6 +140,28 @@ pub fn validate_pkcs7_padding(string: &[u8]) -> Result<Vec<u8>, CryptoError> {
 mod tests {
     use crate::util::hamming_distance;
     use crate::util::parse_key_value;
+    use crate::util::pkcs7_pad;
+
+    #[test]
+    fn test_pkcs7_padding() {
+        let blocksize = 16;
+
+        let mut string = Vec::<u8>::new();
+        for size in 0..blocksize - 1 {
+            string.push(b'A');
+            let output = pkcs7_pad(&string, blocksize);
+            for index in size + 1..blocksize {
+                assert_eq!((blocksize - size - 1) as u8, output[index]);
+            }
+        }
+
+        string.push(b'A');
+        let output = pkcs7_pad(&string, blocksize);
+        assert_eq!(blocksize * 2, output.len());
+        for index in 0..blocksize {
+            assert_eq!(blocksize as u8, output[index + blocksize]);
+        }
+    }
 
     #[test]
     fn test_hamming() {
