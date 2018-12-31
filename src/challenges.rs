@@ -415,15 +415,15 @@ mod tests {
     fn test_cbc_padding_oracle() {
         let blocksize = 16;
         let key = generate_random_bytes(blocksize);
+        let mut rng = rand::thread_rng();
+        let plaintext = PADDING_ORACLE_STRINGS[rng.gen_range(0, 10)].as_bytes();
 
         // First function
         // Encrypt a random plaintext and return the ciphertext and the IV
-        // TODO: Randomize the IV
         let encrypt = || {
-            let iv = iter::repeat(0u8).take(blocksize).collect::<Vec<u8>>();
-            let mut rng = rand::thread_rng();
-            let plaintext = PADDING_ORACLE_STRINGS[rng.gen_range(0, 10)].as_bytes();
-            println!("plaintext = {:?}", plaintext);
+            let iv = iter::repeat_with(|| rand::random::<u8>())
+                .take(blocksize)
+                .collect::<Vec<u8>>();
             (aes_128_cbc_encrypt(&key, &iv, &plaintext).unwrap(), iv)
         };
 
@@ -440,36 +440,24 @@ mod tests {
         let mut solution = Vec::<u8>::new();
 
         // To start, we grab the ciphertext
-        let (ciphertext, iv) = encrypt();
+        let (ciphertext, mut iv) = encrypt();
 
         // We start by altering the last byte of the first block
         let ciphertext_length = ciphertext.len();
-        println!("Original ciphertext is {:?}", ciphertext);
-        println!("Ciphertext length is {}", ciphertext_length);
         let num_blocks = ciphertext_length / blocksize;
         let mut test_ciphertext = ciphertext.clone();
-        for block in (0..num_blocks).rev() {
-            println!("Block {}", block);
+        for block in (1..num_blocks).rev() {
             for block_index in (0..blocksize).rev() {
-                println!("Block index = {}", block_index);
                 let index = (block - 1) * blocksize + block_index;
-                let target_index = block * blocksize + block_index;
                 let original_value = test_ciphertext[index];
                 let padding_value: u8 = (blocksize - block_index) as u8;
                 let mut found = false;
-                for byte in 0u8..255u8 {
+                for byte in 0..=255 {
                     if byte != original_value {
                         test_ciphertext[index] = byte;
                         let (correct, decrypted) = check_padding(&test_ciphertext, &iv);
                         if correct {
-                            println!("Byte value is {}", byte);
-                            println!("index = {}", index);
-                            println!("decrypted = {:?}", decrypted);
                             solution.push(byte ^ padding_value ^ original_value);
-                            println!("Solution so far is {:?}", solution);
-                            solution.reverse();
-                            println!("Solution as string: {}", str::from_utf8(&solution).unwrap());
-                            solution.reverse();
                             found = true;
                             break;
                         }
@@ -478,55 +466,41 @@ mod tests {
                 if !found {
                     solution.push(padding_value);
                     test_ciphertext[index] = original_value;
-                    //panic!("Whoops! Ran out of numbers");
                 }
                 for mod_index in index..block * blocksize {
                     test_ciphertext[mod_index] ^= padding_value ^ (padding_value + 1);
-                    println!(
-                        "Setting ciphertext[{}] to {}",
-                        mod_index, test_ciphertext[mod_index]
-                    );
                 }
             }
             test_ciphertext = ciphertext[..block * blocksize].to_vec();
         }
-        /*
-        println!("Original ciphertext is {:?}", ciphertext);
-        println!("Ciphertext length is {}", ciphertext_length);
-        for block_index in 0..blocksize {
-            let index = ciphertext_length - blocksize - block_index - 1;
-            let mut byte = 0u8;
-            let original_byte = ciphertext[index];
-            loop {
-                // Skip over origimnal ciphertext byte
-                if byte == original_byte {
-                    byte += 1;
+        for index in (0..blocksize).rev() {
+            let original_value = iv[index];
+            let padding_value: u8 = (blocksize - index) as u8;
+            let mut found = false;
+            for byte in 0..=255 {
+                if byte != original_value {
+                    iv[index] = byte;
+                    let (correct, decrypted) = check_padding(&test_ciphertext, &iv);
+                    if correct {
+                        solution.push(byte ^ padding_value ^ original_value);
+                        found = true;
+                        break;
+                    }
                 }
-                ciphertext[index] = byte;
-                let (correct, decrypted) = check_padding(&ciphertext, &iv);
-                if correct {
-                    println!("index = {}", index);
-                    println!("I think padding is {:?}", (block_index + 1) as u8);
-                    println!("ciphertext is {:?}", ciphertext);
-                    println!("byte is {}", byte);
-                    println!("decrypted = {:?}", decrypted);
-                    solution.push(byte ^ ((block_index + 1) as u8) ^ original_byte);
-                    println!("Solution so far is {:?}", solution);
-                    break;
-                }
-                if byte == 255 {
-                    panic!("Whoops! Ran out of numbers");
-                }
-                byte += 1;
             }
-            ciphertext[index] =
-                ciphertext[index] ^ (block_index + 1) as u8 ^ (block_index + 2) as u8;
+            if !found {
+                solution.push(padding_value);
+                test_ciphertext[index] = original_value;
+            }
+            for mod_index in index..blocksize {
+                iv[mod_index] ^= padding_value ^ (padding_value + 1);
+            }
         }
-        */
 
         solution.reverse();
-        println!("{:?}", solution);
-        println!("solution is {}", str::from_utf8(&solution).unwrap());
-        assert!(false);
+        assert_eq!(
+            str::from_utf8(plaintext).unwrap(),
+            str::from_utf8(&validate_pkcs7_padding(&solution).unwrap()).unwrap(),
+        );
     }
 }
