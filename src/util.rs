@@ -1,4 +1,5 @@
 use crate::exception::CryptoError;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::error::Error;
 #[cfg(test)]
@@ -121,6 +122,9 @@ pub fn validate_pkcs7_padding(string: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let maybe_pad_byte: Option<u8> = result.pop();
     if maybe_pad_byte.is_some() {
         let pad_byte = maybe_pad_byte.unwrap();
+        if pad_byte == 0 {
+            return Err(CryptoError::BadPadding);
+        };
         for _ in 0..pad_byte - 1 {
             match result.pop() {
                 None => return Err(CryptoError::BadPadding),
@@ -134,6 +138,15 @@ pub fn validate_pkcs7_padding(string: &[u8]) -> Result<Vec<u8>, CryptoError> {
     }
 
     Ok(result)
+}
+
+pub fn map_blocks(ciphertext: &[u8], blocksize: usize) -> Vec<Vec<u8>> {
+    ciphertext
+        .iter()
+        .chunks(blocksize)
+        .into_iter()
+        .map(|c| c.cloned().collect::<Vec<u8>>())
+        .collect::<Vec<Vec<u8>>>()
 }
 
 #[cfg(test)]

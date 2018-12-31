@@ -162,7 +162,7 @@ mod tests {
         let key = "YELLOW SUBMARINE".as_bytes();
         let ciphertext = read_base64_file("data/10.txt");
         let iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
-        let plaintext = aes_128_cbc_decrypt(&key, &iv, &ciphertext).unwrap();
+        let plaintext = aes_128_cbc_decrypt(&key, &iv, &ciphertext, true).unwrap();
         assert!(str::from_utf8(&plaintext)
             .unwrap()
             .starts_with("I'm back and I'm ringin' the bell"));
@@ -357,7 +357,7 @@ mod tests {
         };
 
         // Decrypt function
-        let decrypt = |ciphertext: &[u8]| aes_128_cbc_decrypt(&key, &iv, ciphertext);
+        let decrypt = |ciphertext: &[u8]| aes_128_cbc_decrypt(&key, &iv, ciphertext, true);
 
         // Second function
         let is_admin = |ciphertext: &[u8]| {

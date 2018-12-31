@@ -14,6 +14,7 @@ mod util;
 use crate::util::generate_random_bytes;
 use crate::util::get_character_histogram;
 use crate::util::hamming_distance;
+use crate::util::map_blocks;
 use crate::util::pkcs7_pad;
 use crate::util::score_text;
 use crate::util::validate_pkcs7_padding;
@@ -291,6 +292,7 @@ pub fn aes_128_cbc_decrypt(
     key: &[u8],
     iv: &[u8],
     ciphertext: &[u8],
+    remove_padding: bool,
 ) -> Result<Vec<u8>, SymmetricCipherError> {
     let chunks = ciphertext
         .chunks(16)
@@ -303,7 +305,11 @@ pub fn aes_128_cbc_decrypt(
         vector = chunk;
     }
 
-    Ok(validate_pkcs7_padding(&plaintext).unwrap())
+    if remove_padding {
+        Ok(validate_pkcs7_padding(&plaintext).unwrap())
+    } else {
+        Ok(plaintext)
+    }
 }
 
 pub fn aes_128_cbc_encrypt(
@@ -467,15 +473,6 @@ pub fn profile_for(email: &str, uid: usize, role: &str) -> String {
         .join("&")
 }
 
-pub fn map_blocks(ciphertext: &[u8], blocksize: usize) -> Vec<Vec<u8>> {
-    ciphertext
-        .iter()
-        .chunks(blocksize)
-        .into_iter()
-        .map(|c| c.cloned().collect::<Vec<u8>>())
-        .collect::<Vec<Vec<u8>>>()
-}
-
 pub fn find_prefix_length<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCipherError>>(
     encrypt_fn: &F,
 ) -> Option<usize> {
@@ -550,7 +547,7 @@ mod tests {
         let plaintext = "Hello World Jack";
         let iv = std::iter::repeat(0u8).take(16).collect::<Vec<u8>>();
         let ciphertext = aes_128_cbc_encrypt(&key, &iv, &plaintext.as_bytes()).unwrap();
-        let decrypted = aes_128_cbc_decrypt(&key, &iv, &ciphertext).unwrap();
+        let decrypted = aes_128_cbc_decrypt(&key, &iv, &ciphertext, true).unwrap();
         assert_eq!(plaintext, str::from_utf8(&decrypted).unwrap());
     }
     #[test]
