@@ -6,6 +6,7 @@ mod tests {
     use crate::aes_128_ecb_encrypt;
     use crate::break_repeating_key_xor;
     use base64;
+    use rand::Rng;
     //use brute_force_xor_key;
     use crate::decrypt_ecb_byte_at_a_time;
     use crate::detect_aes_ecb;
@@ -394,5 +395,137 @@ mod tests {
         encrypted[27] ^= 4;
 
         assert!(is_admin(&encrypted));
+    }
+
+    const PADDING_ORACLE_STRINGS: [&str; 10] = [
+        "MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc=",
+        "MDAwMDAxV2l0aCB0aGUgYmFzcyBraWNrZWQgaW4gYW5kIHRoZSBWZWdhJ3MgYXJlIHB1bXBpbic=",
+        "MDAwMDAyUXVpY2sgdG8gdGhlIHBvaW50LCB0byB0aGUgcG9pbnQsIG5vIGZha2luZw==",
+        "MDAwMDAzQ29va2luZyBNQydzIGxpa2UgYSBwb3VuZCBvZiBiYWNvbg==",
+        "MDAwMDA0QnVybmluZyAnZW0sIGlmIHlvdSBhaW4ndCBxdWljayBhbmQgbmltYmxl",
+        "MDAwMDA1SSBnbyBjcmF6eSB3aGVuIEkgaGVhciBhIGN5bWJhbA==",
+        "MDAwMDA2QW5kIGEgaGlnaCBoYXQgd2l0aCBhIHNvdXBlZCB1cCB0ZW1wbw==",
+        "MDAwMDA3SSdtIG9uIGEgcm9sbCwgaXQncyB0aW1lIHRvIGdvIHNvbG8=",
+        "MDAwMDA4b2xsaW4nIGluIG15IGZpdmUgcG9pbnQgb2g=",
+        "MDAwMDA5aXRoIG15IHJhZy10b3AgZG93biBzbyBteSBoYWlyIGNhbiBibG93",
+    ];
+
+    // Sixteenth cryptopals challenge - https://cryptopals.com/sets/3/challenges/16
+    #[test]
+    fn test_cbc_padding_oracle() {
+        let blocksize = 16;
+        let key = generate_random_bytes(blocksize);
+
+        // First function
+        // Encrypt a random plaintext and return the ciphertext and the IV
+        // TODO: Randomize the IV
+        let encrypt = || {
+            let iv = iter::repeat(0u8).take(blocksize).collect::<Vec<u8>>();
+            let mut rng = rand::thread_rng();
+            let plaintext = PADDING_ORACLE_STRINGS[rng.gen_range(0, 10)].as_bytes();
+            println!("plaintext = {:?}", plaintext);
+            (aes_128_cbc_encrypt(&key, &iv, &plaintext).unwrap(), iv)
+        };
+
+        // Second function
+        // Decrypt the ciphertext and return true if the padding is legit, false if not
+        let check_padding = |ciphertext: &[u8], iv: &[u8]| {
+            let decrypted = aes_128_cbc_decrypt(&key, &iv, &ciphertext, false).unwrap();
+            match validate_pkcs7_padding(&decrypted) {
+                Ok(_) => (true, decrypted),
+                Err(_) => (false, decrypted),
+            }
+        };
+
+        let mut solution = Vec::<u8>::new();
+
+        // To start, we grab the ciphertext
+        let (mut ciphertext, iv) = encrypt();
+
+        // We start by altering the last byte of the first block
+        let ciphertext_length = ciphertext.len();
+        println!("Original ciphertext is {:?}", ciphertext);
+        println!("Ciphertext length is {}", ciphertext_length);
+        let num_blocks = ciphertext_length / blocksize;
+        for block in (0..num_blocks).rev() {
+            println!("Block {}", block);
+            for block_index in (0..blocksize).rev() {
+                println!("Block index = {}", block_index);
+                let index = (block - 1) * blocksize + block_index;
+                let target_index = block * blocksize + block_index;
+                let original_value = ciphertext[index];
+                let padding_value: u8 = (blocksize - block_index) as u8;
+                let mut found = false;
+                for byte in 0u8..255u8 {
+                    if byte != original_value {
+                        ciphertext[index] = byte;
+                        let (correct, decrypted) = check_padding(&ciphertext, &iv);
+                        if correct {
+                            println!("Byte value is {}", byte);
+                            println!("index = {}", index);
+                            println!("decrypted = {:?}", decrypted);
+                            solution.push(byte ^ padding_value ^ original_value);
+                            println!("Solution so far is {:?}", solution);
+                            solution.reverse();
+                            println!("Solution as string: {}", str::from_utf8(&solution).unwrap());
+                            solution.reverse();
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    solution.push(padding_value);
+                    ciphertext[index] = original_value;
+                    //panic!("Whoops! Ran out of numbers");
+                }
+                for mod_index in index..block * blocksize {
+                    ciphertext[mod_index] ^= padding_value ^ (padding_value + 1);
+                    println!(
+                        "Setting ciphertext[{}] to {}",
+                        mod_index, ciphertext[mod_index]
+                    );
+                }
+            }
+            ciphertext = ciphertext[..block * blocksize].to_vec();
+        }
+        /*
+        println!("Original ciphertext is {:?}", ciphertext);
+        println!("Ciphertext length is {}", ciphertext_length);
+        for block_index in 0..blocksize {
+            let index = ciphertext_length - blocksize - block_index - 1;
+            let mut byte = 0u8;
+            let original_byte = ciphertext[index];
+            loop {
+                // Skip over origimnal ciphertext byte
+                if byte == original_byte {
+                    byte += 1;
+                }
+                ciphertext[index] = byte;
+                let (correct, decrypted) = check_padding(&ciphertext, &iv);
+                if correct {
+                    println!("index = {}", index);
+                    println!("I think padding is {:?}", (block_index + 1) as u8);
+                    println!("ciphertext is {:?}", ciphertext);
+                    println!("byte is {}", byte);
+                    println!("decrypted = {:?}", decrypted);
+                    solution.push(byte ^ ((block_index + 1) as u8) ^ original_byte);
+                    println!("Solution so far is {:?}", solution);
+                    break;
+                }
+                if byte == 255 {
+                    panic!("Whoops! Ran out of numbers");
+                }
+                byte += 1;
+            }
+            ciphertext[index] =
+                ciphertext[index] ^ (block_index + 1) as u8 ^ (block_index + 2) as u8;
+        }
+        */
+
+        solution.reverse();
+        println!("{:?}", solution);
+        println!("solution is {}", str::from_utf8(&solution).unwrap());
+        assert!(false);
     }
 }
