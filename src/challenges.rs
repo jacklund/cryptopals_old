@@ -440,26 +440,27 @@ mod tests {
         let mut solution = Vec::<u8>::new();
 
         // To start, we grab the ciphertext
-        let (mut ciphertext, iv) = encrypt();
+        let (ciphertext, iv) = encrypt();
 
         // We start by altering the last byte of the first block
         let ciphertext_length = ciphertext.len();
         println!("Original ciphertext is {:?}", ciphertext);
         println!("Ciphertext length is {}", ciphertext_length);
         let num_blocks = ciphertext_length / blocksize;
+        let mut test_ciphertext = ciphertext.clone();
         for block in (0..num_blocks).rev() {
             println!("Block {}", block);
             for block_index in (0..blocksize).rev() {
                 println!("Block index = {}", block_index);
                 let index = (block - 1) * blocksize + block_index;
                 let target_index = block * blocksize + block_index;
-                let original_value = ciphertext[index];
+                let original_value = test_ciphertext[index];
                 let padding_value: u8 = (blocksize - block_index) as u8;
                 let mut found = false;
                 for byte in 0u8..255u8 {
                     if byte != original_value {
-                        ciphertext[index] = byte;
-                        let (correct, decrypted) = check_padding(&ciphertext, &iv);
+                        test_ciphertext[index] = byte;
+                        let (correct, decrypted) = check_padding(&test_ciphertext, &iv);
                         if correct {
                             println!("Byte value is {}", byte);
                             println!("index = {}", index);
@@ -476,18 +477,18 @@ mod tests {
                 }
                 if !found {
                     solution.push(padding_value);
-                    ciphertext[index] = original_value;
+                    test_ciphertext[index] = original_value;
                     //panic!("Whoops! Ran out of numbers");
                 }
                 for mod_index in index..block * blocksize {
-                    ciphertext[mod_index] ^= padding_value ^ (padding_value + 1);
+                    test_ciphertext[mod_index] ^= padding_value ^ (padding_value + 1);
                     println!(
                         "Setting ciphertext[{}] to {}",
-                        mod_index, ciphertext[mod_index]
+                        mod_index, test_ciphertext[mod_index]
                     );
                 }
             }
-            ciphertext = ciphertext[..block * blocksize].to_vec();
+            test_ciphertext = ciphertext[..block * blocksize].to_vec();
         }
         /*
         println!("Original ciphertext is {:?}", ciphertext);
