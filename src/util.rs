@@ -93,11 +93,18 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> usize {
         })
 }
 
+// Check if the string is padded, if so, return it
+// Otherwise, pad it and return it
 pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     let mut ret = string.to_vec();
-    let padding_size = blocksize - (string.len() % blocksize);
-    ret.extend(iter::repeat(padding_size as u8).take(padding_size));
-    ret
+    match validate_pkcs7_padding(string) {
+        Err(_) => {
+            let padding_size = blocksize - (string.len() % blocksize);
+            ret.extend(iter::repeat(padding_size as u8).take(padding_size));
+            ret
+        }
+        Ok(_) => ret,
+    }
 }
 
 pub fn generate_random_bytes(size: usize) -> Vec<u8> {
