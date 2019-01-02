@@ -10,7 +10,7 @@
       "request": "launch",
       "target": "./target/debug/deps/cryptopals-28cee4fcbaefeda1",
       "cwd": "${workspaceRoot}",
-      "arguments": "--test test_cbc_padding_oracle"
+      "arguments": ""
     }
   ]
 }
