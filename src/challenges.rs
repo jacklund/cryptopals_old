@@ -7,6 +7,7 @@ mod tests {
     use crate::break_repeating_key_xor;
     use base64;
     use rand::Rng;
+    use std::cmp::max;
     //use brute_force_xor_key;
     use crate::decrypt_ecb_byte_at_a_time;
     use crate::detect_aes_ecb;
@@ -432,71 +433,93 @@ mod tests {
         let check_padding = |ciphertext: &[u8], iv: &[u8]| {
             let decrypted = aes_128_cbc_decrypt(&key, &iv, &ciphertext, false).unwrap();
             match validate_pkcs7_padding(&decrypted) {
-                Ok(_) => (true, decrypted),
-                Err(_) => (false, decrypted),
+                Ok(_) => true,
+                Err(_) => false,
             }
         };
 
-        let mut solution = Vec::<u8>::new();
+        // Function to decrypt it block-by-block
+        let try_block = |block_num: usize, ciphertext: &[u8], iv: &[u8], solution: &mut Vec<u8>| {
+            // If we're at the first block, we have to modify the IV,
+            // otherwise we're modifying the previous block of ciphertext
+            let mut block = if block_num == 0 {
+                iv.to_vec()
+            } else {
+                ciphertext.to_vec()
+            };
 
-        // To start, we grab the ciphertext
-        let (ciphertext, mut iv) = encrypt();
-
-        // We start by altering the last byte of the first block
-        let ciphertext_length = ciphertext.len();
-        let num_blocks = ciphertext_length / blocksize;
-        let mut test_ciphertext = ciphertext.clone();
-        for block in (1..num_blocks).rev() {
+            // Iterate through the block
             for block_index in (0..blocksize).rev() {
-                let index = (block - 1) * blocksize + block_index;
-                let original_value = test_ciphertext[index];
+                // The value we're modifying is either in the IV or the ciphertext
+                let index = if block_num == 0 {
+                    block_index
+                } else {
+                    (block_num - 1) * blocksize + block_index
+                };
+
+                // Hold on to the actual value
+                let original_value = block[index];
                 let padding_value: u8 = (blocksize - block_index) as u8;
                 let mut found = false;
+
+                // Try all the possible u8 values
                 for byte in 0..=255 {
                     if byte != original_value {
-                        test_ciphertext[index] = byte;
-                        let (correct, decrypted) = check_padding(&test_ciphertext, &iv);
-                        if correct {
+                        block[index] = byte;
+                        let padding_correct = if block_num == 0 {
+                            check_padding(ciphertext, &block)
+                        } else {
+                            check_padding(&block, iv)
+                        };
+                        // Found it
+                        if padding_correct {
                             solution.push(byte ^ padding_value ^ original_value);
                             found = true;
                             break;
                         }
                     }
                 }
+
+                // If we didn't find it, chances are it's the first byte of padding
+                // because that wouldn't need to be changed
                 if !found {
                     solution.push(padding_value);
-                    test_ciphertext[index] = original_value;
+                    block[index] = original_value;
                 }
-                for mod_index in index..block * blocksize {
-                    test_ciphertext[mod_index] ^= padding_value ^ (padding_value + 1);
-                }
-            }
-            test_ciphertext = ciphertext[..block * blocksize].to_vec();
-        }
-        for index in (0..blocksize).rev() {
-            let original_value = iv[index];
-            let padding_value: u8 = (blocksize - index) as u8;
-            let mut found = false;
-            for byte in 0..=255 {
-                if byte != original_value {
-                    iv[index] = byte;
-                    let (correct, decrypted) = check_padding(&test_ciphertext, &iv);
-                    if correct {
-                        solution.push(byte ^ padding_value ^ original_value);
-                        found = true;
-                        break;
+
+                // We modify the padding bytes we've done so far to generate
+                // the next padding value
+                if block_index > 0 {
+                    let block_max = if block_num == 0 {
+                        blocksize
+                    } else {
+                        block_num * blocksize
+                    };
+                    for mod_index in index..block_max {
+                        block[mod_index] ^= padding_value ^ (padding_value + 1);
                     }
                 }
             }
-            if !found {
-                solution.push(padding_value);
-                test_ciphertext[index] = original_value;
-            }
-            for mod_index in index..blocksize {
-                iv[mod_index] ^= padding_value ^ (padding_value + 1);
-            }
+        };
+
+        let mut solution = Vec::<u8>::new();
+
+        // To start, we grab the ciphertext
+        let (ciphertext, iv) = encrypt();
+
+        // We clone the ciphertext and iterate backwards through the blocks
+        let num_blocks = ciphertext.len() / blocksize;
+        let test_ciphertext = ciphertext.clone();
+        for block in (0..num_blocks).rev() {
+            try_block(
+                block,
+                &test_ciphertext[..(block + 1) * blocksize], // Truncate the last block after we're done
+                &iv,
+                &mut solution,
+            );
         }
 
+        // Reverse the order of the solution
         solution.reverse();
         assert_eq!(
             str::from_utf8(plaintext).unwrap(),
