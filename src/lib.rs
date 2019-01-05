@@ -8,7 +8,6 @@ extern crate itertools;
 extern crate percent_encoding;
 extern crate rand;
 
-mod block;
 mod challenges;
 mod exception;
 mod util;
