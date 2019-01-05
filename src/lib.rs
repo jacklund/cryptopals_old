@@ -517,16 +517,16 @@ pub fn find_prefix_suffix_lengths<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
 }
 
 pub fn ctr(key: &[u8], nonce: &[u8], input: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
-    let mut counter: u64 = 0;
     let mut nonce_counter: Vec<u8> = nonce.to_vec();
     let mut output = Vec::<u8>::new();
     let blocksize = 16;
-    for chunk in input.chunks(blocksize) {
-        nonce_counter.write_u64::<LittleEndian>(counter).unwrap();
+    for (counter, chunk) in input.chunks(blocksize).enumerate() {
+        nonce_counter
+            .write_u64::<LittleEndian>(counter as u64)
+            .unwrap();
         let encrypted_nonce_counter = aes_128_ecb_encrypt(key, &nonce_counter, false)?;
         output.extend(xor(chunk, &encrypted_nonce_counter[..chunk.len()]).unwrap());
         nonce_counter.truncate(8);
-        counter += 1;
     }
 
     Ok(output)
