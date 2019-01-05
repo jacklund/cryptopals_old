@@ -332,7 +332,7 @@ mod tests {
         );
     }
 
-    // Fifteenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/15
+    // Sixteenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/16
     #[test]
     fn test_bit_flipping_attack() {
         define_encode_set! {
@@ -411,7 +411,7 @@ mod tests {
         "MDAwMDA5aXRoIG15IHJhZy10b3AgZG93biBzbyBteSBoYWlyIGNhbiBibG93",
     ];
 
-    // Sixteenth cryptopals challenge - https://cryptopals.com/sets/3/challenges/16
+    // Seventeenth cryptopals challenge - https://cryptopals.com/sets/3/challenges/17
     #[test]
     fn test_cbc_padding_oracle() {
         let blocksize = 16;
