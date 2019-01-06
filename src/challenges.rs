@@ -597,7 +597,10 @@ mod tests {
     // Nineteenth cryptopals challenge - https://cryptopals.com/sets/3/challenges/19
     // Note: I didn't exactly follow the directions - I came to the conclusion that the
     // solution was similar to the repeating xor on my own, so this is much closer to the 20th
-    // one (although my solution is better, IMHO).
+    // one (although my solution is better, IMHO, because I guess the entire keystream, not just
+    // the shortest part).
+    // Interestingly, the first letter is wrong in both, and (not surprisingly), there are more errors
+    // towards the end, where the number of samples is smaller.
     #[test]
     fn test_breaking_ctr() {
         let key = "YELLOW SUBMARINE".as_bytes();
