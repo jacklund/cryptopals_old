@@ -532,6 +532,38 @@ pub fn ctr(key: &[u8], nonce: &[u8], input: &[u8]) -> Result<Vec<u8>, SymmetricC
     Ok(output)
 }
 
+pub fn break_ctr(ciphertexts: &[Vec<u8>]) -> Vec<Vec<u8>> {
+    // Get max size of our keystream
+    let keystream_size = ciphertexts.iter().fold(0usize, |mut size, c| {
+        if c.len() > size {
+            size = c.len();
+        }
+        size
+    });
+
+    // Make a list of the nth letter of each ciphertext
+    let mut letters: Vec<Vec<u8>> = iter::repeat(Vec::<u8>::new())
+        .take(keystream_size)
+        .collect();
+    ciphertexts.iter().for_each(|c| {
+        c.iter().enumerate().for_each(|(index, value)| {
+            letters[index].push(*value);
+        });
+    });
+
+    // Find the key letter by letter
+    let mut key: Vec<u8> = vec![];
+    letters.iter().for_each(|string| {
+        let (_, k, _) = find_xor_key(&string).unwrap();
+        key.push(k);
+    });
+
+    ciphertexts
+        .iter()
+        .map(|ciphertext| xor(&key[..ciphertext.len()], ciphertext).unwrap())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::aes_128_cbc_decrypt;

@@ -35,6 +35,16 @@ pub fn read_base64_file(filename: &str) -> Vec<u8> {
     data
 }
 
+#[cfg(test)]
+pub fn read_base64_file_line_by_line(filename: &str) -> Vec<Vec<u8>> {
+    let mut data: Vec<Vec<u8>> = vec![];
+    for line in BufReader::new(File::open(filename).unwrap()).lines() {
+        data.push(base64::decode(&line.unwrap()).unwrap());
+    }
+
+    data
+}
+
 // Get a list of the characters in the string, ordered by frequency
 pub fn get_character_histogram(string: &[u8]) -> Vec<u8> {
     let histogram = string
