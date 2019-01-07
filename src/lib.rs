@@ -761,13 +761,4 @@ mod tests {
         let (_, found_size) = find_prefix_suffix_lengths(&encrypt);
         assert_eq!(suffix_size, found_size);
     }
-
-    #[test]
-    fn test_marsenne_twister() {
-        let seed: u32 = rand::random::<u32>();
-        let mut mt = MarsenneTwister::from_seed(seed);
-        for _ in 0..100 {
-            println!("{}", mt.next_u32());
-        }
-    }
 }
