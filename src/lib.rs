@@ -564,6 +564,126 @@ pub fn break_ctr(ciphertexts: &[Vec<u8>]) -> Vec<Vec<u8>> {
         .collect()
 }
 
+pub struct MarsenneTwister {
+    mt: Vec<u64>,
+    index: usize,
+    w: u64,
+    n: usize,
+    m: usize,
+    r: usize,
+    a: u64,
+    u: u64,
+    d: u64,
+    s: u64,
+    b: u64,
+    t: u64,
+    c: u64,
+    l: u64,
+    f: u64,
+}
+
+impl MarsenneTwister {
+    pub fn new(
+        w: u64,
+        n: usize,
+        m: usize,
+        r: usize,
+        a: u64,
+        u: u64,
+        d: u64,
+        s: u64,
+        b: u64,
+        t: u64,
+        c: u64,
+        l: u64,
+        f: u64,
+    ) -> MarsenneTwister {
+        let mt = MarsenneTwister {
+            mt: iter::repeat(0u64).take(n).collect(),
+            index: n,
+            w: w,
+            n: n,
+            m: m,
+            r: r,
+            a: a,
+            u: u,
+            d: d,
+            s: s,
+            b: b,
+            t: t,
+            c: c,
+            l: l,
+            f: f,
+        };
+
+        mt
+    }
+
+    fn twist(&mut self) {
+        let lower_mask: u64 = (1 << self.r) - 1;
+        let upper_mask: u64 = !lower_mask;
+        for i in 0..self.n {
+            let x = (upper_mask & self.mt[i]) + (self.mt[(i + 1) % self.n] & lower_mask);
+            let mut xa = x >> 1;
+            if x % 2 != 0 {
+                xa |= self.a;
+            }
+            self.mt[i] = self.mt[(i + self.m) % self.n] ^ xa;
+        }
+    }
+}
+
+pub fn mt19937() -> MarsenneTwister {
+    MarsenneTwister::new(
+        32, 624, 397, 31, 0x9908B0DF, 11, 0xFFFFFFFF, 7, 0x9D2C5680, 15, 0xEFC60000, 18,
+        1812433253,
+    )
+}
+
+impl MarsenneTwister {
+    fn from_seed(seed: u32) -> Self {
+        let mut mt = mt19937();
+        mt.index = mt.n;
+        mt.mt[0] = seed as u64;
+        for i in 1..mt.n {
+            mt.mt[i] =
+                0xFFFFFFFF & (mt.f * (mt.mt[i - 1] ^ (mt.mt[i - 1] >> (mt.w - 2))) + (i as u64));
+        }
+
+        mt
+    }
+}
+
+impl rand::RngCore for MarsenneTwister {
+    fn next_u32(&mut self) -> u32 {
+        if self.index >= self.n {
+            self.twist();
+            self.index = 0;
+        };
+
+        let mut y = self.mt[self.index];
+        y ^= (y >> self.u) & self.d;
+        y ^= (y << self.s) & self.b;
+        y ^= (y << self.t) & self.c;
+        y ^= y >> self.l;
+
+        self.index += 1;
+        (y & 0xFFFFFFFF) as u32
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.next_u32().into()
+    }
+
+    fn fill_bytes(&mut self, _dest: &mut [u8]) {
+        unimplemented!()
+    }
+
+    fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+        unimplemented!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::aes_128_cbc_decrypt;
@@ -578,7 +698,9 @@ mod tests {
     use crate::generate_random_bytes;
     use crate::profile_for;
     use crate::EncryptionType;
+    use crate::MarsenneTwister;
     use hex;
+    use rand::RngCore;
     use std;
     use std::str;
 
@@ -638,5 +760,14 @@ mod tests {
         };
         let (_, found_size) = find_prefix_suffix_lengths(&encrypt);
         assert_eq!(suffix_size, found_size);
+    }
+
+    #[test]
+    fn test_marsenne_twister() {
+        let seed: u32 = rand::random::<u32>();
+        let mut mt = MarsenneTwister::from_seed(seed);
+        for _ in 0..100 {
+            println!("{}", mt.next_u32());
+        }
     }
 }
