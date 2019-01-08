@@ -641,7 +641,7 @@ pub fn mt19937() -> MarsenneTwister {
 }
 
 impl MarsenneTwister {
-    fn from_seed(seed: u32) -> Self {
+    pub fn from_seed(seed: u32) -> Self {
         let mut mt = mt19937();
         mt.index = mt.n;
         mt.mt[0] = seed as u64;
@@ -702,6 +702,7 @@ mod tests {
     use hex;
     use rand::RngCore;
     use std;
+    use std::iter;
     use std::str;
 
     #[test]
@@ -760,5 +761,19 @@ mod tests {
         };
         let (_, found_size) = find_prefix_suffix_lengths(&encrypt);
         assert_eq!(suffix_size, found_size);
+    }
+
+    #[test]
+    fn test_mt19937() {
+        let seed = rand::random::<u32>();
+        let mut mt1 = MarsenneTwister::from_seed(seed);
+        let values: Vec<u32> = iter::repeat_with(|| mt1.next_u32())
+            .take(100)
+            .collect::<Vec<u32>>();
+        let mut mt2 = MarsenneTwister::from_seed(seed);
+        let values2: Vec<u32> = iter::repeat_with(|| mt2.next_u32())
+            .take(100)
+            .collect::<Vec<u32>>();
+        assert_eq!(None, values.iter().zip(values2).find(|(v1, v2)| *v1 != v2));
     }
 }

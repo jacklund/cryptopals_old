@@ -2,7 +2,7 @@
 mod tests {
     use crate::find_xor_key;
     use std::fs::File;
-    use std::io::{BufRead, BufReader, Read};
+    use std::io::{BufRead, BufReader};
     use std::str;
 
     // Fourth cryptopals challenge - https://cryptopals.com/sets/1/challenges/4
