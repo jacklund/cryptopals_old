@@ -19,11 +19,11 @@ mod tests {
     fn challenge22() {
         // Random number of seconds ago
         let seconds_ago = rand::thread_rng().gen_range(40, 1000);
-        let timestamp = get_current_timestamp() - seconds_ago * 1000;
+        let now = get_current_timestamp();
+        let timestamp = now - seconds_ago * 1000;
         let mut mt = MarsenneTwister::from_seed(timestamp);
         let random_value = mt.next_u32();
-        let now = get_current_timestamp();
-        let mut seed_guess = now - seconds_ago - 1000 * 1000;
+        let mut seed_guess = now - (seconds_ago + 60) * 1000;
         loop {
             mt = MarsenneTwister::from_seed(seed_guess);
             if mt.next_u32() == random_value {

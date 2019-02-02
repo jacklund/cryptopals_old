@@ -572,13 +572,6 @@ pub struct MarsenneTwister {
     m: usize,
     r: usize,
     a: u64,
-    u: u64,
-    d: u64,
-    s: u64,
-    b: u64,
-    t: u64,
-    c: u64,
-    l: u64,
     f: u64,
 }
 
@@ -589,13 +582,6 @@ impl MarsenneTwister {
         m: usize,
         r: usize,
         a: u64,
-        u: u64,
-        d: u64,
-        s: u64,
-        b: u64,
-        t: u64,
-        c: u64,
-        l: u64,
         f: u64,
     ) -> MarsenneTwister {
         let mt = MarsenneTwister {
@@ -606,13 +592,6 @@ impl MarsenneTwister {
             m: m,
             r: r,
             a: a,
-            u: u,
-            d: d,
-            s: s,
-            b: b,
-            t: t,
-            c: c,
-            l: l,
             f: f,
         };
 
@@ -635,8 +614,7 @@ impl MarsenneTwister {
 
 pub fn mt19937() -> MarsenneTwister {
     MarsenneTwister::new(
-        32, 624, 397, 31, 0x9908B0DF, 11, 0xFFFFFFFF, 7, 0x9D2C5680, 15, 0xEFC60000, 18,
-        1812433253,
+        32, 624, 397, 31, 0x9908B0DF, 1812433253,
     )
 }
 
@@ -652,6 +630,32 @@ impl MarsenneTwister {
 
         mt
     }
+
+    pub fn from_splice(generator: &[u64]) -> Self {
+        let mut mt = mt19937();
+        mt.index = 0;
+        mt.mt = generator.to_vec();
+
+        mt
+    }
+}
+
+const U: usize = 11;
+const D: u64 = 0xFFFFFFFF;
+const S: usize = 7;
+const B: u64 = 0x9D2C5680;
+const T: usize = 15;
+const C: u64 = 0xEFC60000;
+const L: usize = 18;
+
+pub fn temper(value: u64) -> u32 {
+    let mut y: u64 = value as u64;
+    y ^= (y >> U) & D;
+    y ^= (y << S) & B;
+    y ^= (y << T) & C;
+    y ^= y >> L;
+
+    (y & 0xFFFFFFFF) as u32
 }
 
 impl rand::RngCore for MarsenneTwister {
@@ -661,14 +665,10 @@ impl rand::RngCore for MarsenneTwister {
             self.index = 0;
         };
 
-        let mut y = self.mt[self.index];
-        y ^= (y >> self.u) & self.d;
-        y ^= (y << self.s) & self.b;
-        y ^= (y << self.t) & self.c;
-        y ^= y >> self.l;
+        let result = temper(self.mt[self.index]);
 
         self.index += 1;
-        (y & 0xFFFFFFFF) as u32
+        result
     }
 
     fn next_u64(&mut self) -> u64 {
