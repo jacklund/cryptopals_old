@@ -26,6 +26,7 @@ use crypto::buffer::ReadBuffer;
 use crypto::buffer::WriteBuffer;
 use crypto::symmetriccipher::SymmetricCipherError;
 use itertools::Itertools;
+use rand::RngCore;
 use std::iter;
 use std::str;
 
@@ -684,6 +685,59 @@ impl rand::RngCore for MarsenneTwister {
     }
 }
 
+pub struct MTIterator {
+    mt: MarsenneTwister,
+    buffer: Vec<u8>,
+    index: usize,
+}
+
+impl MTIterator {
+    fn new(seed: u32) -> Self {
+        MTIterator {
+            mt: MarsenneTwister::from_seed(seed),
+            buffer: vec![],
+            index: 0,
+        }
+    }
+}
+
+// Byte-wise iterator of the Marsenne Twister
+impl iter::Iterator for MTIterator {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.buffer.len() {
+            self.buffer.clear();
+            self.buffer.write_u32::<LittleEndian>(self.mt.next_u32()).unwrap();
+            self.index = 0;
+        }
+
+        let ret = self.buffer[self.index];
+        self.index += 1;
+        Some(ret)
+    }
+}
+
+impl iter::IntoIterator for MarsenneTwister {
+    type Item = u8;
+    type IntoIter = MTIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        MTIterator {
+            mt: self,
+            buffer: vec![],
+            index: 0,
+        }
+    }
+}
+
+// Encrypt/decrypt using MT
+pub fn mt_encrypt_decrypt(key: u32, text: &[u8]) -> Vec<u8> {
+    let iter = MTIterator::new(key);
+
+    text.iter().zip(iter).map(|(t, k)| t ^ k).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::aes_128_cbc_decrypt;
@@ -698,12 +752,15 @@ mod tests {
     use crate::generate_random_bytes;
     use crate::profile_for;
     use crate::EncryptionType;
-    use crate::MarsenneTwister;
+    use crate::mt_encrypt_decrypt;
+    use crate::{MarsenneTwister, MTIterator};
     use hex;
     use rand::RngCore;
     use std;
     use std::iter;
     use std::str;
+    use std::io::Cursor;
+    use byteorder::{LittleEndian, ReadBytesExt};
 
     #[test]
     fn test_ecb_encrypt() {
@@ -775,5 +832,29 @@ mod tests {
             .take(100)
             .collect::<Vec<u32>>();
         assert_eq!(None, values.iter().zip(values2).find(|(v1, v2)| *v1 != v2));
+    }
+
+    #[test]
+    fn test_mt_iterator() {
+        let seed = rand::random::<u32>();
+        let mut mt = MarsenneTwister::from_seed(seed);
+        let ref mut mt_iterator = MarsenneTwister::from_seed(seed).into_iter();
+        for _count in 0..100 {
+            let buffer = mt_iterator.take(4).collect::<Vec<u8>>();
+            let mut rdr = Cursor::new(buffer);
+            let value = rdr.read_u32::<LittleEndian>().unwrap();
+            assert_eq!(mt.next_u32(), value);
+        }
+    }
+
+    #[test]
+    fn test_mt_encrypt_decrypt() {
+        let key = rand::random::<u32>();
+        let text = "Hello, World!";
+
+        let ciphertext = mt_encrypt_decrypt(key, text.as_bytes());
+        let plaintext = mt_encrypt_decrypt(key, &ciphertext);
+
+        assert_eq!(text, str::from_utf8(&plaintext).unwrap());
     }
 }

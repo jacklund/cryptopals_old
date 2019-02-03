@@ -5,3 +5,4 @@ mod challenge20;
 mod challenge21;
 mod challenge22;
 mod challenge23;
+mod challenge24;

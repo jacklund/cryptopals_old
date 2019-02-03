@@ -1,5 +1,5 @@
 use std::u32;
-use crate::{B, C, D, L, S, T, U};
+use crate::{B, C, L, S, T, U};
 
 // The following were cribbed from https://jazzy.id.au/2010/09/22/cracking_random_number_generators_part_3.html
 // I managed the xor parts on my own, but TBH I still don't completely understand how the mask stuff works
