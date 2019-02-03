@@ -1,5 +1,5 @@
-use std::u32;
 use crate::{B, C, L, S, T, U};
+use std::u32;
 
 // The following were cribbed from https://jazzy.id.au/2010/09/22/cracking_random_number_generators_part_3.html
 // I managed the xor parts on my own, but TBH I still don't completely understand how the mask stuff works
@@ -34,7 +34,7 @@ fn unbitshift_left_xor(v: u64, shift: usize, mask: u64) -> u64 {
 }
 
 fn untemper(value: u32) -> u64 {
-    let mut result = unbitshift_right_xor(value as u64, L);
+    let mut result = unbitshift_right_xor(u64::from(value), L);
     result = unbitshift_left_xor(result, T, C);
     result = unbitshift_left_xor(result, S, B);
     result = unbitshift_right_xor(result, U);
@@ -47,7 +47,7 @@ mod tests {
     use crate::challenges::set_3::challenge23::{
         unbitshift_left_xor, unbitshift_right_xor, untemper,
     };
-    use crate::{temper, MarsenneTwister, B, C, D, L, S, T, U};
+    use crate::{temper, MarsenneTwister, B, C, L, S, T, U};
     use rand::RngCore;
 
     #[test]

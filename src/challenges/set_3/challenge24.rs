@@ -1,8 +1,29 @@
+use crate::MTIterator;
+
+// Encrypt/decrypt using MT
+pub fn mt_encrypt_decrypt(key: u32, text: &[u8]) -> Vec<u8> {
+    let iter = MTIterator::new(key);
+
+    text.iter().zip(iter).map(|(t, k)| t ^ k).collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::mt_encrypt_decrypt;
+    use crate::challenges::set_3::challenge24::mt_encrypt_decrypt;
     use rand;
     use rand::Rng;
+    use std::str;
+
+    #[test]
+    fn test_mt_encrypt_decrypt() {
+        let key = rand::random::<u32>();
+        let text = "Hello, World!";
+
+        let ciphertext = mt_encrypt_decrypt(key, text.as_bytes());
+        let plaintext = mt_encrypt_decrypt(key, &ciphertext);
+
+        assert_eq!(text, str::from_utf8(&plaintext).unwrap());
+    }
 
     fn setup_challenge24(key: u32, known_plaintext: &str) -> Vec<u8> {
         let prefix_length: usize = rand::thread_rng().gen_range(1, 20);

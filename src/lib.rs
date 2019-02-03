@@ -577,26 +577,17 @@ pub struct MarsenneTwister {
 }
 
 impl MarsenneTwister {
-    pub fn new(
-        w: u64,
-        n: usize,
-        m: usize,
-        r: usize,
-        a: u64,
-        f: u64,
-    ) -> MarsenneTwister {
-        let mt = MarsenneTwister {
+    pub fn new(w: u64, n: usize, m: usize, r: usize, a: u64, f: u64) -> MarsenneTwister {
+        MarsenneTwister {
             mt: iter::repeat(0u64).take(n).collect(),
             index: n,
-            w: w,
-            n: n,
-            m: m,
-            r: r,
-            a: a,
-            f: f,
-        };
-
-        mt
+            w,
+            n,
+            m,
+            r,
+            a,
+            f,
+        }
     }
 
     fn twist(&mut self) {
@@ -614,16 +605,14 @@ impl MarsenneTwister {
 }
 
 pub fn mt19937() -> MarsenneTwister {
-    MarsenneTwister::new(
-        32, 624, 397, 31, 0x9908B0DF, 1812433253,
-    )
+    MarsenneTwister::new(32, 624, 397, 31, 0x9908B0DF, 1812433253)
 }
 
 impl MarsenneTwister {
     pub fn from_seed(seed: u32) -> Self {
         let mut mt = mt19937();
         mt.index = mt.n;
-        mt.mt[0] = seed as u64;
+        mt.mt[0] = u64::from(seed);
         for i in 1..mt.n {
             mt.mt[i] =
                 0xFFFFFFFF & (mt.f * (mt.mt[i - 1] ^ (mt.mt[i - 1] >> (mt.w - 2))) + (i as u64));
@@ -708,7 +697,9 @@ impl iter::Iterator for MTIterator {
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.buffer.len() {
             self.buffer.clear();
-            self.buffer.write_u32::<LittleEndian>(self.mt.next_u32()).unwrap();
+            self.buffer
+                .write_u32::<LittleEndian>(self.mt.next_u32())
+                .unwrap();
             self.index = 0;
         }
 
@@ -731,13 +722,6 @@ impl iter::IntoIterator for MarsenneTwister {
     }
 }
 
-// Encrypt/decrypt using MT
-pub fn mt_encrypt_decrypt(key: u32, text: &[u8]) -> Vec<u8> {
-    let iter = MTIterator::new(key);
-
-    text.iter().zip(iter).map(|(t, k)| t ^ k).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::aes_128_cbc_decrypt;
@@ -752,15 +736,14 @@ mod tests {
     use crate::generate_random_bytes;
     use crate::profile_for;
     use crate::EncryptionType;
-    use crate::mt_encrypt_decrypt;
-    use crate::{MarsenneTwister, MTIterator};
+    use crate::MarsenneTwister;
+    use byteorder::{LittleEndian, ReadBytesExt};
     use hex;
     use rand::RngCore;
     use std;
+    use std::io::Cursor;
     use std::iter;
     use std::str;
-    use std::io::Cursor;
-    use byteorder::{LittleEndian, ReadBytesExt};
 
     #[test]
     fn test_ecb_encrypt() {
@@ -845,16 +828,5 @@ mod tests {
             let value = rdr.read_u32::<LittleEndian>().unwrap();
             assert_eq!(mt.next_u32(), value);
         }
-    }
-
-    #[test]
-    fn test_mt_encrypt_decrypt() {
-        let key = rand::random::<u32>();
-        let text = "Hello, World!";
-
-        let ciphertext = mt_encrypt_decrypt(key, text.as_bytes());
-        let plaintext = mt_encrypt_decrypt(key, &ciphertext);
-
-        assert_eq!(text, str::from_utf8(&plaintext).unwrap());
     }
 }
