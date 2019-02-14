@@ -517,6 +517,7 @@ pub fn find_prefix_suffix_lengths<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
     )
 }
 
+#[derive(Clone)]
 pub struct CTRKeystreamIterator {
     key: Vec<u8>,
     counter: usize,
