@@ -517,20 +517,53 @@ pub fn find_prefix_suffix_lengths<F: Fn(&[u8]) -> Result<Vec<u8>, SymmetricCiphe
     )
 }
 
-pub fn ctr(key: &[u8], nonce: &[u8], input: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
-    let mut nonce_counter: Vec<u8> = nonce.to_vec();
-    let mut output = Vec::<u8>::new();
-    let blocksize = 16;
-    for (counter, chunk) in input.chunks(blocksize).enumerate() {
-        nonce_counter
-            .write_u64::<LittleEndian>(counter as u64)
-            .unwrap();
-        let encrypted_nonce_counter = aes_128_ecb_encrypt(key, &nonce_counter, false)?;
-        output.extend(xor(chunk, &encrypted_nonce_counter[..chunk.len()]).unwrap());
-        nonce_counter.truncate(8);
+pub struct CTRKeystreamIterator {
+    key: Vec<u8>,
+    counter: usize,
+    nonce_counter: Vec<u8>,
+    buffer: Vec<u8>,
+    index: usize,
+}
+
+impl CTRKeystreamIterator {
+    fn new(key: &[u8], nonce: &[u8]) -> Self {
+        CTRKeystreamIterator {
+            key: key.to_vec(),
+            counter: 0,
+            nonce_counter: nonce.to_vec(),
+            buffer: vec![],
+            index: 0,
+        }
     }
 
-    Ok(output)
+    fn next_block(&mut self) -> Result<Vec<u8>, SymmetricCipherError> {
+        self.nonce_counter.write_u64::<LittleEndian>(self.counter as u64).unwrap();
+        self.counter += 1;
+        let result = aes_128_ecb_encrypt(&self.key, &self.nonce_counter, false);
+        self.nonce_counter.truncate(8);
+        result
+    }
+}
+
+impl iter::Iterator for CTRKeystreamIterator {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.buffer.len() {
+            self.buffer = self.next_block().unwrap();
+            self.index = 0;
+        }
+
+        let ret = self.buffer[self.index];
+        self.index += 1;
+        Some(ret)
+    }
+}
+
+pub fn ctr(key: &[u8], nonce: &[u8], input: &[u8]) -> Vec<u8> {
+    let iter = CTRKeystreamIterator::new(key, nonce);
+
+    input.iter().zip(iter).map(|(t, k)| t ^ k).collect()
 }
 
 pub fn break_ctr(ciphertexts: &[Vec<u8>]) -> Vec<Vec<u8>> {

@@ -65,7 +65,7 @@ mod tests {
 
         let ciphertexts: Vec<Vec<u8>> = plaintexts
             .iter()
-            .map(|p| ctr(key, &iter::repeat(0u8).take(8).collect::<Vec<u8>>(), &p).unwrap())
+            .map(|p| ctr(key, &iter::repeat(0u8).take(8).collect::<Vec<u8>>(), &p))
             .collect();
 
         // Interestingly, the plaintexts aren't exactly the same, but are similar enough

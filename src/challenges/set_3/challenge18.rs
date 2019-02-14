@@ -17,8 +17,7 @@ mod tests {
             key,
             &iter::repeat(0u8).take(8).collect::<Vec<u8>>(),
             &ciphertext,
-        )
-        .unwrap();
+        );
 
         assert_eq!(
             "Yo, VIP Let's kick it Ice, Ice, baby Ice, Ice, baby ",
