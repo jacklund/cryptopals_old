@@ -36,6 +36,7 @@ mod tests {
     }
 
     #[test]
+    // Twenty-fourth cryptopals challenge - https://cryptopals.com/sets/3/challenges/24
     fn challenge24() {
         let known_plaintext = "AAAAAAAAAAAAAA";
         let known_plaintext_bytes = known_plaintext.as_bytes();

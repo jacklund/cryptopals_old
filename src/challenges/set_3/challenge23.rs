@@ -87,6 +87,7 @@ mod tests {
     }
 
     #[test]
+    // Twenty-Third cryptopals challenge - https://cryptopals.com/sets/3/challenges/23
     fn challenge23() {
         let mut mt = MarsenneTwister::from_seed(rand::random::<u32>());
         let mut values = vec![];
