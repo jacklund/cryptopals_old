@@ -9,6 +9,13 @@ mod tests {
     use std::str;
 
     // Twenty-seventh cryptopals challenge - https://cryptopals.com/sets/4/challenges/27
+    //
+    // Basically, we're exposing the horrors of using the key as the IV, by encrypting
+    // something 3 blocks long, then modifying the ciphertext so that it looks like
+    // C1 + 0 + C1 (where 0 means a zero-block). Because of the way CBC decrypts things
+    // this decrypts the last block as D(C1) ^ 0 = D(C1) and the first block as
+    // D(C1) ^ IV = D(C1) ^ key. So, when we XOR them, we get:
+    // D(C1) ^ D(C1) ^ key = key. ¯\_(ツ)_/¯
     #[test]
     fn challenge27() {
         define_encode_set! {
