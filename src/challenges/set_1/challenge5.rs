@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::encrypt_decrypt_repeating_key_xor;
+    use crate::xor::encrypt_decrypt_repeating_key_xor;
 
     // Fifth cryptopals challenge - https://cryptopals.com/sets/1/challenges/5
     #[test]

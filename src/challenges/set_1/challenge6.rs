@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::break_repeating_key_xor;
-    use crate::encrypt_decrypt_repeating_key_xor;
-    use crate::find_repeating_xor_keysize;
+    use crate::xor::break_repeating_key_xor;
+    use crate::xor::encrypt_decrypt_repeating_key_xor;
+    use crate::xor::find_repeating_xor_keysize;
     use crate::util::read_base64_file;
     use std::str;
 
