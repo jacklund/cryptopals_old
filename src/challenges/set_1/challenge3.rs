@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::find_xor_key;
+    use crate::xor::find_xor_key;
     use std::str;
 
     // Third cryptopals challenge - https://cryptopals.com/sets/1/challenges/3

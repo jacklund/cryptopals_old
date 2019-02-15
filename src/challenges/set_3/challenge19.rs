@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::break_ctr;
-    use crate::ctr;
+    use crate::ctr::break_ctr;
+    use crate::ctr::ctr;
     use std::iter;
     use std::str;
 

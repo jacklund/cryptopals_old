@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::find_xor_key;
+    use crate::xor::find_xor_key;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
     use std::str;

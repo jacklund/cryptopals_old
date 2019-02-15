@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::ctr;
+    use crate::ctr::ctr;
     use std::iter;
     use std::str;
 

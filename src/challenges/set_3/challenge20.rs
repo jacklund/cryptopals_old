@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::break_ctr;
-    use crate::ctr;
+    use crate::ctr::break_ctr;
+    use crate::ctr::ctr;
     use crate::util::read_base64_file_line_by_line;
     use std::iter;
     use std::str;

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::ctr;
+    use crate::ctr::ctr;
     use crate::util::generate_random_bytes;
     use percent_encoding::percent_encode;
     use std::iter;
