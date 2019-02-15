@@ -1,4 +1,4 @@
-use crate::MTIterator;
+use crate::mt19937::MTIterator;
 
 // Encrypt/decrypt using MT
 pub fn mt_encrypt_decrypt(key: u32, text: &[u8]) -> Vec<u8> {

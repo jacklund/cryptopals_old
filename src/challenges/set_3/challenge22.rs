@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::MarsenneTwister;
+    use crate::mt19937::MarsenneTwister;
     use rand::{Rng, RngCore};
     use std::time;
 

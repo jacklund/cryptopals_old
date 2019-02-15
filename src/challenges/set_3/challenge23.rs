@@ -1,4 +1,4 @@
-use crate::{B, C, L, S, T, U};
+use crate::mt19937::{B, C, L, S, T, U};
 use std::u32;
 
 // The following were cribbed from https://jazzy.id.au/2010/09/22/cracking_random_number_generators_part_3.html
@@ -47,7 +47,7 @@ mod tests {
     use crate::challenges::set_3::challenge23::{
         unbitshift_left_xor, unbitshift_right_xor, untemper,
     };
-    use crate::{temper, MarsenneTwister, B, C, L, S, T, U};
+    use crate::mt19937::{temper, MarsenneTwister, B, C, L, S, T, U};
     use rand::RngCore;
 
     #[test]
