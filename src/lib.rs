@@ -14,5 +14,6 @@ mod challenges;
 mod ctr;
 mod exception;
 mod mt19937;
+mod sha1;
 mod util;
 mod xor;
