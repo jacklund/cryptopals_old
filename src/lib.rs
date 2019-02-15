@@ -30,6 +30,8 @@ use rand::RngCore;
 use std::iter;
 use std::str;
 
+const ETAOIN: &str = " \neEtTaAoOiInNsShHrRlLdDuUcCmMwWyYfFgGpPbBvVkKjJxXqQzZ0123456789.,!?'\":;-";
+
 // Decrypt ciphertext using xor
 pub fn decrypt_xor(key: u8, ciphertext: &[u8]) -> Vec<u8> {
     ciphertext.iter().map(|c| c ^ key).collect::<Vec<u8>>()

@@ -30,10 +30,44 @@ pub fn edit_ctr(ciphertext: &[u8], key: &[u8], offset: usize, new_text: &[u8]) -
 mod tests {
     use crate::challenges::set_4::challenge25::edit_ctr;
     use crate::util::read_base64_file;
-    use crate::{aes_128_ecb_decrypt, ctr};
+    use crate::{aes_128_ecb_decrypt, ctr, ETAOIN};
     use rand::Rng;
     use std::iter;
     use std::str;
+
+    fn generate_ctr_key() -> Vec<u8> {
+        let mut rng = rand::thread_rng();
+        let mut key: Vec<u8> = vec![];
+        for _count in 0..16 {
+            key.push(rng.gen());
+        }
+
+        key
+    }
+
+    #[test]
+    fn test_edit_ctr() {
+        let plaintext = "The quick brown fox jumps over the lazy dog";
+        let key = generate_ctr_key();
+        let ciphertext = ctr(
+            &key,
+            &iter::repeat(0u8).take(8).collect::<Vec<u8>>(),
+            plaintext.as_bytes(),
+        );
+
+        let new_ciphertext = edit_ctr(&ciphertext, &key, 16, "dog".as_bytes());
+
+        let new_plaintext = ctr(
+            &key,
+            &iter::repeat(0u8).take(8).collect::<Vec<u8>>(),
+            &new_ciphertext,
+        );
+
+        assert_eq!(
+            "The quick brown dog jumps over the lazy dog",
+            str::from_utf8(&new_plaintext).unwrap()
+        );
+    }
 
     // Twenty-fifth cryptopals challenge - https://cryptopals.com/sets/4/challenges/25
     #[test]
@@ -44,12 +78,8 @@ mod tests {
         assert!(str::from_utf8(&plaintext)
             .unwrap()
             .starts_with("I'm back and I'm ringin' the bell"));
-        let mut rng = rand::thread_rng();
 
-        let mut key: Vec<u8> = vec![];
-        for _count in 0..16 {
-            key.push(rng.gen());
-        }
+        let key: Vec<u8> = generate_ctr_key();
 
         let ciphertext = ctr(
             &key,
@@ -57,16 +87,25 @@ mod tests {
             &plaintext,
         );
 
-        let new_ciphertext = edit_ctr(&ciphertext, &key, 17, "jumpin'".as_bytes());
+        let edit_api = |ciphertext: &[u8], offset: usize, text: &[u8]| {
+            edit_ctr(&ciphertext, &key, offset, text)
+        };
 
-        let new_plaintext = ctr(
-            &key,
-            &iter::repeat(0u8).take(8).collect::<Vec<u8>>(),
-            &new_ciphertext,
-        );
-
-        assert!(str::from_utf8(&new_plaintext)
+        let mut my_plaintext: Vec<u8> = vec![];
+        for index in 0..ciphertext.len() {
+            let mut found = false;
+            for letter in ETAOIN.as_bytes() {
+                let new_ciphertext = edit_api(&ciphertext, index, &[*letter]);
+                if new_ciphertext[index] == ciphertext[index] {
+                    my_plaintext.push(*letter);
+                    found = true;
+                    break;
+                }
+            }
+            assert!(found);
+        }
+        assert!(str::from_utf8(&my_plaintext)
             .unwrap()
-            .starts_with("I'm back and I'm jumpin' the bell"));
+            .starts_with("I'm back and I'm ringin' the bell"));
     }
 }
