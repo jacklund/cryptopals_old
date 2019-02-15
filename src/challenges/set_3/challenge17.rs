@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::aes_128_cbc_decrypt;
-    use crate::aes_128_cbc_encrypt;
+    use crate::aes_cbc::aes_128_cbc_decrypt;
+    use crate::aes_cbc::aes_128_cbc_encrypt;
     use crate::util::generate_random_bytes;
-    use crate::validate_pkcs7_padding;
+    use crate::util::validate_pkcs7_padding;
     use rand::Rng;
     use std::iter;
     use std::str;

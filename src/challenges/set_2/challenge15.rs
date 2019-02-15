@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::exception::CryptoError;
-    use crate::validate_pkcs7_padding;
+    use crate::util::validate_pkcs7_padding;
 
     // Fifteenth cryptopals challenge - https://cryptopals.com/sets/2/challenges/15
     #[test]

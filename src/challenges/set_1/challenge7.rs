@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::aes_128_ecb_decrypt;
+    use crate::aes_ecb::aes_128_ecb_decrypt;
     use crate::util::read_base64_file;
     use std::str;
 

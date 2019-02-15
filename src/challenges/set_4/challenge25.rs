@@ -28,7 +28,8 @@ pub fn edit_ctr(ciphertext: &[u8], key: &[u8], offset: usize, new_text: &[u8]) -
 mod tests {
     use crate::challenges::set_4::challenge25::edit_ctr;
     use crate::util::{read_base64_file, generate_random_bytes};
-    use crate::{aes_128_ecb_decrypt, ctr, ETAOIN};
+    use crate::aes_ecb::aes_128_ecb_decrypt;
+    use crate::{ctr, ETAOIN};
     use rand::Rng;
     use std::iter;
     use std::str;

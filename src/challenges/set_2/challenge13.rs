@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::aes_128_ecb_decrypt;
-    use crate::aes_128_ecb_encrypt;
+    use crate::aes_ecb::aes_128_ecb_decrypt;
+    use crate::aes_ecb::aes_128_ecb_encrypt;
     use crate::find_blocksize;
     use crate::profile_for;
     use crate::util::generate_random_bytes;

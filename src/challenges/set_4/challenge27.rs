@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::aes_128_cbc_decrypt;
-    use crate::aes_128_cbc_encrypt;
+    use crate::aes_cbc::aes_128_cbc_decrypt;
+    use crate::aes_cbc::aes_128_cbc_encrypt;
     use crate::util::generate_random_bytes;
     use crate::util::remove_padding;
     use percent_encoding::percent_encode;
