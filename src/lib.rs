@@ -80,7 +80,7 @@ fn try_decrypt_with_test_string(
     key_list: &[u8],
 ) -> Option<(usize, u8, Vec<u8>)> {
     // Try each key in the key list against each
-    let (score, key, decrypted) = test_string.into_iter().fold(
+    let (score, key, decrypted) = test_string.iter().fold(
         (0, 0u8, Vec::<u8>::new()),
         |(score, key, decrypted), value| {
             // Iterate over the key list,

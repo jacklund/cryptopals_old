@@ -19,9 +19,7 @@ pub fn edit_ctr(ciphertext: &[u8], key: &[u8], offset: usize, new_text: &[u8]) -
         .collect();
 
     let mut output: Vec<u8> = ciphertext.to_vec();
-    for index in offset..(offset + new_text.len()) {
-        output[index] = ciphertext_chunk[index - offset];
-    }
+    output[offset..(offset + new_text.len())].clone_from_slice(&ciphertext_chunk[0..((offset + new_text.len()) - offset)]);
 
     output
 }

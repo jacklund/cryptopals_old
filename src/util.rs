@@ -19,7 +19,7 @@ pub fn xor(first: &[u8], second: &[u8]) -> Result<Vec<u8>, Box<Error>> {
     assert_eq!(first.len(), second.len());
 
     Ok(first
-        .into_iter()
+        .iter()
         .zip(second.into_iter())
         .map(|(x, y)| x ^ y)
         .collect::<Vec<u8>>())
