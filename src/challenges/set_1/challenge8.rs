@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::detect_aes_ecb;
+    use crate::aes_ecb::detect_aes_ecb;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
 
