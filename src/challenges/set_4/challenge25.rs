@@ -27,26 +27,16 @@ pub fn edit_ctr(ciphertext: &[u8], key: &[u8], offset: usize, new_text: &[u8]) -
 #[cfg(test)]
 mod tests {
     use crate::challenges::set_4::challenge25::edit_ctr;
-    use crate::util::read_base64_file;
+    use crate::util::{read_base64_file, generate_random_bytes};
     use crate::{aes_128_ecb_decrypt, ctr, ETAOIN};
     use rand::Rng;
     use std::iter;
     use std::str;
 
-    fn generate_ctr_key() -> Vec<u8> {
-        let mut rng = rand::thread_rng();
-        let mut key: Vec<u8> = vec![];
-        for _count in 0..16 {
-            key.push(rng.gen());
-        }
-
-        key
-    }
-
     #[test]
     fn test_edit_ctr() {
         let plaintext = "The quick brown fox jumps over the lazy dog";
-        let key = generate_ctr_key();
+        let key = generate_random_bytes(16);
         let ciphertext = ctr(
             &key,
             &iter::repeat(0u8).take(8).collect::<Vec<u8>>(),
@@ -77,7 +67,7 @@ mod tests {
             .unwrap()
             .starts_with("I'm back and I'm ringin' the bell"));
 
-        let key: Vec<u8> = generate_ctr_key();
+        let key: Vec<u8> = generate_random_bytes(16);
 
         let ciphertext = ctr(
             &key,
