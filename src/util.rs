@@ -20,7 +20,7 @@ pub fn xor(first: &[u8], second: &[u8]) -> Result<Vec<u8>, Box<Error>> {
 
     Ok(first
         .iter()
-        .zip(second.into_iter())
+        .zip(second.iter())
         .map(|(x, y)| x ^ y)
         .collect::<Vec<u8>>())
 }
@@ -48,7 +48,7 @@ pub fn read_base64_file_line_by_line(filename: &str) -> Vec<Vec<u8>> {
 // Get a list of the characters in the string, ordered by frequency
 pub fn get_character_histogram(string: &[u8]) -> Vec<u8> {
     let histogram = string
-        .into_iter()
+        .iter()
         .fold(HashMap::<u8, usize>::new(), |mut h, c| {
             if h.contains_key(c) {
                 let count = h.get_mut(c).unwrap();
@@ -117,6 +117,19 @@ pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
     }
 }
 
+pub fn remove_padding(string: &[u8], blocksize: usize) -> Vec<u8> {
+    let maybe_pad: usize = string[string.len() - 1] as usize;
+    if maybe_pad <= blocksize {
+        if ! string[(string.len() - maybe_pad)..string.len()].to_vec().iter().all(|&c| c == maybe_pad as u8) {
+            return string.to_vec();
+        }
+
+        return string[..(string.len() - maybe_pad)].to_vec();
+    }
+
+    string.to_vec()
+}
+
 pub fn generate_random_bytes(size: usize) -> Vec<u8> {
     iter::repeat_with(rand::random::<u8>)
         .take(size)
@@ -171,6 +184,7 @@ mod tests {
     use crate::util::hamming_distance;
     use crate::util::parse_key_value;
     use crate::util::pkcs7_pad;
+    use crate::util::remove_padding;
 
     #[test]
     fn test_pkcs7_padding() {
@@ -191,6 +205,12 @@ mod tests {
         for index in 0..blocksize {
             assert_eq!(blocksize as u8, output[index + blocksize]);
         }
+    }
+
+    #[test]
+    fn test_remove_padding() {
+        let padded = pkcs7_pad(&"foobar".as_bytes(), 16);
+        assert_eq!("foobar".as_bytes().to_vec(), remove_padding(&padded, 16));
     }
 
     #[test]
