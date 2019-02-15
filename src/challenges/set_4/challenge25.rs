@@ -30,7 +30,7 @@ mod tests {
     use crate::util::{read_base64_file, generate_random_bytes};
     use crate::aes_ecb::aes_128_ecb_decrypt;
     use crate::ctr::ctr;
-    use crate::ETAOIN;
+    use crate::util::ETAOIN;
     use std::iter;
     use std::str;
 

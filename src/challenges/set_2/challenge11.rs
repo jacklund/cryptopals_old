@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::aes_ecb::detect_aes_ecb;
-    use crate::encryption_oracle;
+    use crate::util::encryption_oracle;
     use std::fs::File;
     use std::io::Read;
 

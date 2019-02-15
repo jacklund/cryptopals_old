@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::aes_ecb::decrypt_ecb_byte_at_a_time;
-    use crate::encrypt_with_prefix_and_suffix;
+    use crate::util::encrypt_with_prefix_and_suffix;
     use crate::util::generate_random_bytes;
-    use crate::EncryptionType;
+    use crate::util::EncryptionType;
     use std::str;
 
     const UNKNOWN_STRING_BASE64: &str =

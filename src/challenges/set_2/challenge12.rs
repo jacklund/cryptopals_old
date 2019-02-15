@@ -2,10 +2,10 @@
 mod tests {
     use crate::aes_ecb::decrypt_ecb_byte_at_a_time;
     use crate::aes_ecb::detect_aes_ecb;
-    use crate::encrypt_with_prefix_and_suffix;
-    use crate::find_blocksize;
+    use crate::util::encrypt_with_prefix_and_suffix;
+    use crate::util::find_blocksize;
     use crate::util::generate_random_bytes;
-    use crate::EncryptionType;
+    use crate::util::EncryptionType;
     use std::iter;
     use std::str;
 

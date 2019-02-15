@@ -3,8 +3,8 @@ use crypto::buffer::WriteBuffer;
 use crypto::symmetriccipher::SymmetricCipherError;
 use std::iter;
 
-use crate::find_blocksize;
-use crate::find_prefix_suffix_lengths;
+use crate::util::find_blocksize;
+use crate::util::find_prefix_suffix_lengths;
 
 pub fn aes_128_ecb_decrypt(
     key: &[u8],
