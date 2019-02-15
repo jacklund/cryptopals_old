@@ -59,9 +59,7 @@ mod tests {
                 string = str::from_utf8_unchecked(&decrypted);
             };
             if string.as_bytes().iter().any(|&c| c.is_ascii_control()) {
-                return Err(ASCIIError {
-                    decrypted
-                });
+                return Err(ASCIIError { decrypted });
             }
             for token in string.split(';') {
                 let split = token.split('=').collect::<Vec<&str>>();

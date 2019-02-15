@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use crate::util::read_base64_file;
     use crate::xor::break_repeating_key_xor;
     use crate::xor::encrypt_decrypt_repeating_key_xor;
     use crate::xor::find_repeating_xor_keysize;
-    use crate::util::read_base64_file;
     use std::str;
 
     // Sixth cryptopals challenge - https://cryptopals.com/sets/1/challenges/6

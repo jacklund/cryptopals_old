@@ -3,9 +3,9 @@ mod tests {
     use crate::aes_ecb::aes_128_ecb_decrypt;
     use crate::aes_ecb::aes_128_ecb_encrypt;
     use crate::util::find_blocksize;
-    use crate::util::profile_for;
     use crate::util::generate_random_bytes;
     use crate::util::parse_key_value;
+    use crate::util::profile_for;
     use crypto::symmetriccipher::SymmetricCipherError;
     use std::collections::HashMap;
     use std::iter;

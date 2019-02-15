@@ -19,18 +19,19 @@ pub fn edit_ctr(ciphertext: &[u8], key: &[u8], offset: usize, new_text: &[u8]) -
         .collect();
 
     let mut output: Vec<u8> = ciphertext.to_vec();
-    output[offset..(offset + new_text.len())].clone_from_slice(&ciphertext_chunk[0..((offset + new_text.len()) - offset)]);
+    output[offset..(offset + new_text.len())]
+        .clone_from_slice(&ciphertext_chunk[0..((offset + new_text.len()) - offset)]);
 
     output
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::challenges::set_4::challenge25::edit_ctr;
-    use crate::util::{read_base64_file, generate_random_bytes};
     use crate::aes_ecb::aes_128_ecb_decrypt;
+    use crate::challenges::set_4::challenge25::edit_ctr;
     use crate::ctr::ctr;
     use crate::util::ETAOIN;
+    use crate::util::{generate_random_bytes, read_base64_file};
     use std::iter;
     use std::str;
 

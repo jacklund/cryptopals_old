@@ -12,7 +12,8 @@ use std::io::{BufRead, BufReader};
 use std::iter;
 use std::str;
 
-pub const ETAOIN: &str = " \neEtTaAoOiInNsShHrRlLdDuUcCmMwWyYfFgGpPbBvVkKjJxXqQzZ0123456789.,!?'\":;-";
+pub const ETAOIN: &str =
+    " \neEtTaAoOiInNsShHrRlLdDuUcCmMwWyYfFgGpPbBvVkKjJxXqQzZ0123456789.,!?'\":;-";
 
 pub enum EncryptionType {
     ECB,
@@ -57,17 +58,15 @@ pub fn read_base64_file_line_by_line(filename: &str) -> Vec<Vec<u8>> {
 
 // Get a list of the characters in the string, ordered by frequency
 pub fn get_character_histogram(string: &[u8]) -> Vec<u8> {
-    let histogram = string
-        .iter()
-        .fold(HashMap::<u8, usize>::new(), |mut h, c| {
-            if h.contains_key(c) {
-                let count = h.get_mut(c).unwrap();
-                *count += 1;
-            } else {
-                h.insert(*c, 1);
-            }
-            h
-        });
+    let histogram = string.iter().fold(HashMap::<u8, usize>::new(), |mut h, c| {
+        if h.contains_key(c) {
+            let count = h.get_mut(c).unwrap();
+            *count += 1;
+        } else {
+            h.insert(*c, 1);
+        }
+        h
+    });
 
     let mut list = histogram.into_iter().collect::<Vec<(u8, usize)>>();
     // Sort in decreasing order of count
@@ -130,7 +129,11 @@ pub fn pkcs7_pad(string: &[u8], blocksize: usize) -> Vec<u8> {
 pub fn remove_padding(string: &[u8], blocksize: usize) -> Vec<u8> {
     let maybe_pad: usize = string[string.len() - 1] as usize;
     if maybe_pad <= blocksize {
-        if ! string[(string.len() - maybe_pad)..string.len()].to_vec().iter().all(|&c| c == maybe_pad as u8) {
+        if !string[(string.len() - maybe_pad)..string.len()]
+            .to_vec()
+            .iter()
+            .all(|&c| c == maybe_pad as u8)
+        {
             return string.to_vec();
         }
 
