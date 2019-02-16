@@ -2,23 +2,23 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::Cursor;
 use std::iter;
 
-fn pad_message(message: &[u8]) -> Vec<u8> {
-    let bytelength: usize = message.len();
-    let bitlength: u64 = (bytelength * 8) as u64;
-    let mut tmp_msg = message.to_vec();
-    let padding_size_bytes: usize = 64 - (bytelength % 64);
-    if padding_size_bytes != 0 {
-        let padding_prefix_size = padding_size_bytes - 8;
-        tmp_msg.push(0x80u8); // Append '1' bit
-        tmp_msg.extend(
-            iter::repeat(0u8)
-                .take(padding_prefix_size - 1)
-                .collect::<Vec<u8>>(),
-        );
-        tmp_msg.write_u64::<BigEndian>(bitlength).unwrap();
+pub fn get_padding(length: usize) -> Vec<u8> {
+    let bitlength: u64 = (length * 8) as u64;
+    let mut padding_size_bytes: usize = 64 - (length % 64);
+    if padding_size_bytes < 9 {
+        padding_size_bytes += 64;
     }
+    let mut ret = vec![];
+    ret.push(0x80u8); // Append '1' bit
+    let padding_prefix_size = padding_size_bytes - 8;
+    ret.extend(
+        iter::repeat(0u8)
+            .take(padding_prefix_size - 1)
+            .collect::<Vec<u8>>(),
+    );
+    ret.write_u64::<BigEndian>(bitlength).unwrap();
 
-    tmp_msg
+    ret
 }
 
 fn add32(a: u32, b: u32) -> u32 {
@@ -27,14 +27,28 @@ fn add32(a: u32, b: u32) -> u32 {
 
 pub fn sha1(message: &[u8]) -> Vec<u8> {
     // Initialize variables
-    let mut h0: u32 = 0x67452301;
-    let mut h1: u32 = 0xEFCDAB89;
-    let mut h2: u32 = 0x98BADCFE;
-    let mut h3: u32 = 0x10325476;
-    let mut h4: u32 = 0xC3D2E1F0;
+    let h0: u32 = 0x67452301;
+    let h1: u32 = 0xEFCDAB89;
+    let h2: u32 = 0x98BADCFE;
+    let h3: u32 = 0x10325476;
+    let h4: u32 = 0xC3D2E1F0;
 
+    sha1_with_init(message, h0, h1, h2, h3, h4, message.len())
+}
+
+pub fn sha1_with_init(
+    message: &[u8],
+    mut h0: u32,
+    mut h1: u32,
+    mut h2: u32,
+    mut h3: u32,
+    mut h4: u32,
+    length: usize,
+) -> Vec<u8> {
     // Break message into 512-bit chunks
-    for chunk512 in pad_message(message).chunks(64) {
+    let mut buffer = message.to_vec();
+    buffer.extend(get_padding(length));
+    for chunk512 in buffer.chunks(64) {
         // Break each chunk into 32-bit "words"
         let mut words: Vec<u32> = vec![];
         for chunk32 in chunk512.chunks(4) {
@@ -107,13 +121,14 @@ pub fn sha1_mac(key: &[u8], message: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::sha1::pad_message;
+    use crate::sha1::get_padding;
     use crate::sha1::sha1;
 
     #[test]
     fn test_sha1_padding() {
         let message: Vec<u8> = vec![0x61, 0x62, 0x63, 0x64, 0x65];
-        let padded = pad_message(&message);
+        let mut padded = message.clone();
+        padded.extend(get_padding(message.len()));
 
         let expected_value = vec![
             0x61, 0x62, 0x63, 0x64, 0x65, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
